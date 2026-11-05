@@ -1,4 +1,4 @@
-require('module-alias/register');
+require('./alias');
 require('dotenv').config();
 
 const http = require('http');

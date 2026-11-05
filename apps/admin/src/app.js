@@ -1,10 +1,10 @@
-require('module-alias/register');
+require('./alias');
 
 const express = require('express');
 const defaultPlatform = require('@/platform/common');
 const { createDuplicateKeyVerifier } = require('@/middleware/duplicate-json-keys');
 const { createResponseMiddleware } = require('@/middleware/response');
-const { createErrorHandler } = require('@/middleware/error-handler');
+const { createProblemHandler } = require('@/middleware/problem-handler');
 const { notFound } = require('@/middleware/not-found');
 const { mountRoutes } = require('@/routes');
 
@@ -15,9 +15,12 @@ const { mountRoutes } = require('@/routes');
  * @param {object} options.config - Validated service configuration.
  * @param {object} [options.platform] - Platform helper implementation.
  * @param {Function} [options.isReady] - Optional readiness predicate.
+ * @param {object} [options.store] - Admin store (defaults to the configured store).
+ * @param {object} [options.auth] - Token verifier { verify(token) }.
+ * @param {object} [options.queueClient] - Queue admin API client.
  * @returns {import('express').Express} Configured Express application.
  */
-function createApp({ config, platform = defaultPlatform, isReady } = {}) {
+function createApp({ config, platform = defaultPlatform, isReady, store, auth, queueClient } = {}) {
   if (!config) throw new Error('createApp requires validated configuration');
 
   const app = express();
@@ -31,9 +34,9 @@ function createApp({ config, platform = defaultPlatform, isReady } = {}) {
   );
   app.use(express.urlencoded({ extended: true, limit: config.bodyLimit }));
 
-  mountRoutes(app, { platform, isReady });
+  mountRoutes(app, { platform, isReady, store, auth, queueClient, config });
   app.use(notFound);
-  app.use(createErrorHandler({ platform }));
+  app.use(createProblemHandler({ platform }));
 
   return app;
 }

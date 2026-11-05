@@ -5,7 +5,14 @@ const environmentSchema = Joi.object({
   PORT: Joi.number().port().default(8086),
   BODY_LIMIT: Joi.string().default('100kb'),
   ENABLE_DUPLICATE_JSON_KEY_VALIDATION: Joi.boolean().truthy('true').falsy('false').default(false),
-  GRACEFUL_SHUTDOWN_TIMEOUT_MS: Joi.number().integer().positive().default(10000)
+  GRACEFUL_SHUTDOWN_TIMEOUT_MS: Joi.number().integer().positive().default(10000),
+  DATABASE_URL: Joi.string().uri().allow(null, ''),
+  AUTH_PUBLIC_KEY_JWK: Joi.string().allow(null, ''),
+  AUTH_JWKS_URL: Joi.string().uri().allow(null, ''),
+  AUTH_AUDIENCE: Joi.string().allow(null, ''),
+  AUTH_ISSUER: Joi.string().allow(null, ''),
+  QUEUE_ADMIN_URL: Joi.string().uri().allow(null, ''),
+  QUEUE_ADMIN_TOKEN: Joi.string().allow(null, '')
 }).unknown(true);
 
 /**
@@ -31,7 +38,14 @@ function loadEnvironment(environment = process.env) {
     port: value.PORT,
     bodyLimit: value.BODY_LIMIT,
     enableDuplicateJsonKeyValidation: value.ENABLE_DUPLICATE_JSON_KEY_VALIDATION,
-    gracefulShutdownTimeoutMs: value.GRACEFUL_SHUTDOWN_TIMEOUT_MS
+    gracefulShutdownTimeoutMs: value.GRACEFUL_SHUTDOWN_TIMEOUT_MS,
+    databaseUrl: value.DATABASE_URL || null,
+    authPublicKeyJwk: value.AUTH_PUBLIC_KEY_JWK || null,
+    authJwksUrl: value.AUTH_JWKS_URL || null,
+    authAudience: value.AUTH_AUDIENCE || null,
+    authIssuer: value.AUTH_ISSUER || null,
+    queueAdminUrl: value.QUEUE_ADMIN_URL || null,
+    queueAdminToken: value.QUEUE_ADMIN_TOKEN || null
   };
 }
 
