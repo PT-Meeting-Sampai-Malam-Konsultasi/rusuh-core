@@ -2,7 +2,12 @@ const { createLogger } = require('@rusuh/observability');
 const { createMetrics } = require('@/infrastructure/metrics');
 const { createStore } = require('@/infrastructure/store');
 const { createMidtransClient } = require('@/infrastructure/midtrans/midtrans-client');
+const { createCoreClient } = require('@/infrastructure/core/core-client');
 const { createSnapService } = require('@/modules/snap/snap.service');
+const { createStatusService } = require('@/modules/status/status.service');
+const { createWebhookService } = require('@/modules/webhook/webhook.service');
+const { createWebhookController } = require('@/modules/webhook/webhook.controller');
+const { createWebhookRouter, webhookErrorHandler } = require('@/modules/webhook/webhook.route');
 const { createHealthService } = require('@/modules/health/health.service');
 const { createHealthController } = require('@/modules/health/health.controller');
 const { createHealthRouter } = require('@/modules/health/health.route');
@@ -10,7 +15,9 @@ const { createHealthRouter } = require('@/modules/health/health.route');
 /**
  * Builds the payment-module dependencies from the validated config.
  * The store is in-memory when no DATABASE_URL is set (dev/test) and Postgres
- * otherwise. The Midtrans client is only built when a Server Key is present.
+ * otherwise. The Midtrans client is only built when a Server Key is present;
+ * without one the webhook still runs (every signature fails closed) and Snap
+ * creation throws a clear error.
  *
  * @param {object} config - Validated service configuration.
  * @param {object} [overrides] - Injectable dependencies (tests).
@@ -30,10 +37,43 @@ function buildPaymentDeps(config, overrides = {}) {
           apiBaseUrl: config.midtrans.apiBaseUrl
         })
       : null);
+  const coreClient =
+    overrides.coreClient ||
+    createCoreClient({
+      baseUrl: config.core.internalUrl,
+      credential: config.core.serviceCredential || undefined,
+      timeoutMs: config.core.notifyTimeoutMs
+    });
+
   const snapService =
     overrides.snapService || (midtransClient ? createSnapService({ store, midtransClient, metrics, logger }) : null);
+  const statusService =
+    overrides.statusService ||
+    (midtransClient
+      ? createStatusService({
+          midtransClient,
+          metrics,
+          logger,
+          getStatusMaxRetries: config.getStatusMaxRetries,
+          getStatusRetryBaseMs: config.getStatusRetryBaseMs
+        })
+      : null);
+  const webhookService =
+    overrides.webhookService ||
+    (midtransClient && statusService
+      ? createWebhookService({
+          store,
+          statusService,
+          coreClient,
+          serverKey: config.midtrans.serverKey,
+          metrics,
+          logger,
+          coreNotifyMaxRetries: config.core.notifyMaxRetries,
+          coreNotifyRetryBaseMs: config.core.notifyRetryBaseMs
+        })
+      : null);
 
-  return { logger, metrics, store, midtransClient, snapService };
+  return { logger, metrics, store, midtransClient, coreClient, snapService, statusService, webhookService };
 }
 
 /**
@@ -51,11 +91,19 @@ function mountRoutes(app, { config, isReady, deps } = {}) {
   const healthController = createHealthController(healthService);
   app.use(createHealthRouter(healthController));
 
-  // Internal operations (createSnapTransaction, confirmViaGetStatus,
-  // expireOrder) are service functions used by core-module over the private
-  // network — exposed through the returned deps, not as public routes.
-  // The webhook (the ONLY public endpoint) is wired in the next commit.
+  // The webhook is the ONLY public endpoint of this module. Internal
+  // operations (createSnapTransaction, confirmViaGetStatus, expireOrder) are
+  // service functions used by core-module over the private network — they are
+  // exposed through the returned deps, not as public routes.
   const paymentDeps = deps || (config ? buildPaymentDeps(config) : null);
+  if (paymentDeps?.webhookService) {
+    const webhookController = createWebhookController(paymentDeps.webhookService, {
+      bodyLimitBytes: config?.webhookBodyLimitBytes,
+      logger: paymentDeps.logger
+    });
+    app.use(createWebhookRouter(webhookController));
+    app.use(webhookErrorHandler);
+  }
 
   return { healthService, ...paymentDeps };
 }

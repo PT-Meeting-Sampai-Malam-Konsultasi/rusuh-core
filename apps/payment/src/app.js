@@ -1,4 +1,4 @@
-require('module-alias/register');
+require('./alias');
 
 const express = require('express');
 const defaultPlatform = require('@/platform/common');
@@ -15,9 +15,10 @@ const { mountRoutes } = require('@/routes');
  * @param {object} options.config - Validated service configuration.
  * @param {object} [options.platform] - Platform helper implementation.
  * @param {Function} [options.isReady] - Optional readiness predicate.
+ * @param {object} [options.deps] - Injectable payment dependencies (tests).
  * @returns {import('express').Express} Configured Express application.
  */
-function createApp({ config, platform = defaultPlatform, isReady } = {}) {
+function createApp({ config, platform = defaultPlatform, isReady, deps } = {}) {
   if (!config) throw new Error('createApp requires validated configuration');
 
   const app = express();
@@ -31,7 +32,7 @@ function createApp({ config, platform = defaultPlatform, isReady } = {}) {
   );
   app.use(express.urlencoded({ extended: true, limit: config.bodyLimit }));
 
-  mountRoutes(app, { platform, isReady, config });
+  mountRoutes(app, { platform, isReady, config, deps });
   app.use(notFound);
   app.use(createErrorHandler({ platform }));
 
