@@ -1,8 +1,11 @@
 const Boom = require('@hapi/boom');
 const defaultPlatform = require('@/platform/common');
+const { problemBody } = require('@/lib/problem');
 
 /**
- * Creates the terminal Express error handler with safe client responses.
+ * Terminal Express error handler. Renders RFC 9457 Problem JSON (repo
+ * contract, api/openapi.yaml) with a stable machine `code` and a `traceId`
+ * (the request correlation id when present).
  *
  * @param {object} options - Error-handler dependencies.
  * @param {object} [options.platform] - Platform logging implementation.
@@ -13,26 +16,31 @@ function createErrorHandler({ platform = defaultPlatform } = {}) {
   return (error, request, response, _next) => {
     if (response.headersSent) return;
 
-    const isMalformedJson = error instanceof SyntaxError && Object.hasOwn(error, 'body');
-    let boomError = null;
-    if (Boom.isBoom(error)) {
-      boomError = error;
-    } else if (isMalformedJson) {
-      boomError = Boom.badRequest('Malformed JSON request body');
+    const { correlationId } = request;
+    const traceId = correlationId || request.headers['x-correlation-id'] || undefined;
+    let body;
+    if (error && error.problem) {
+      body = { ...error.problem, ...(traceId ? { traceId } : {}) };
+    } else if (Boom.isBoom(error)) {
+      const { statusCode } = error.output;
+      let code = 'INTERNAL_ERROR';
+      if (statusCode === 400) code = 'VALIDATION_FAILED';
+      else if (statusCode === 404) code = 'NOT_FOUND';
+      body = problemBody(code, error.message, traceId ? { traceId } : {});
+      body.status = statusCode;
+    } else if (error instanceof SyntaxError && Object.hasOwn(error, 'body')) {
+      body = problemBody('VALIDATION_FAILED', 'Malformed JSON request body', traceId ? { traceId } : {});
+    } else {
+      body = problemBody('INTERNAL_ERROR', 'An unexpected error occurred', traceId ? { traceId } : {});
     }
-    const statusCode = boomError?.output?.statusCode || 500;
-    const body = boomError?.output?.payload || {
-      statusCode,
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred'
-    };
+    const statusCode = body.status || 500;
 
     try {
       const logger = platform.LoggerBuilder?.getLogger?.();
       const metadata = platform.LoggerBuilder?.getMetadataFromRequest?.(request) || {};
       logger
         ?.addTags?.(['error-handler'])
-        ?.addData?.({ ...metadata, statusCode, error: error.message })
+        ?.addData?.({ ...metadata, statusCode, error: error.message, code: body.code })
         ?.error?.('API request failed');
     } catch (_loggingError) {
       // Logging failures must not prevent a safe error response.

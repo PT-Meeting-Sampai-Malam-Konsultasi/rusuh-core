@@ -1,21 +1,33 @@
-require('module-alias/register');
+require('./alias');
 require('dotenv').config();
 
 const http = require('http');
 const defaultPlatform = require('@/platform/common');
 const { loadEnvironment } = require('@/config/environment');
 const { createApp } = require('@/app');
+const { createDeps } = require('@/infrastructure/deps');
 
 /**
  * Starts the HTTP server and registers controlled shutdown handlers.
+ * Builds the dependency graph first (real Postgres/Valkey/SQS when their
+ * URLs are configured, in-memory otherwise), then starts the sweeper and
+ * the admission consumer.
  *
- * @returns {http.Server} Active HTTP server.
+ * @returns {Promise<http.Server>} Active HTTP server.
  */
-function startServer() {
+async function startServer() {
   const config = loadEnvironment();
-  const app = createApp({ config });
+  const deps = await createDeps(config);
+  const app = createApp({ config, deps });
   const server = http.createServer(app);
   let shuttingDown = false;
+
+  // Background workers (D9 sweeper + admission consumer, ADR-0023).
+  deps.sweeper.start();
+  const consumerStarted = deps.admissionConsumer.start();
+  if (!consumerStarted && config.nodeEnv !== 'test') {
+    console.warn('[core] admission consumer not started (no SQS admission queue configured).');
+  }
 
   /**
    * Stops accepting connections and exits after cleanup or the configured deadline.
@@ -29,6 +41,10 @@ function startServer() {
 
     const logger = defaultPlatform.LoggerBuilder?.getLogger?.();
     logger?.addTags?.(['server', 'shutdown'])?.addData?.({ signal })?.info?.('Graceful shutdown started');
+
+    deps.sweeper.stop();
+    deps.admissionConsumer.stop();
+    Promise.all([deps.store.close(), deps.stock.close()]).catch(() => {});
 
     const timeout = setTimeout(() => process.exit(1), config.gracefulShutdownTimeoutMs);
     timeout.unref();
@@ -65,6 +81,11 @@ function startServer() {
   return server;
 }
 
-if (require.main === module) startServer();
+if (require.main === module) {
+  startServer().catch((error) => {
+    console.error('[core] failed to start:', error.message);
+    process.exit(1);
+  });
+}
 
 module.exports = { startServer };

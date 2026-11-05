@@ -3,15 +3,18 @@
     "@": "src"
   },
   "dependencies": {
+    "@aws-sdk/client-sqs": "^3.1162.0",
     "@hapi/boom": "^10.0.1",
     "@rusuh/auth": "0.1.0",
     "@rusuh/contracts": "0.1.0",
     "@rusuh/observability": "0.1.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "ioredis": "^6.0.0",
     "joi": "^17.13.3",
     "lru-cache": "^10.4.3",
-    "module-alias": "^2.2.3"
+    "module-alias": "^2.2.3",
+    "pg": "^8.23.1"
   },
   "description": "Transaction service: events, booking, hold (Valkey Lua), payment entry, tickets, sweeper.",
   "devDependencies": {
