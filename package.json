@@ -1,0 +1,47 @@
+{
+  "name": "rusuh-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Rusuh ticket-booking core backend: Node.js monorepo (auth, core, payment, notification, officer, admin).",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.16.0 <23",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "check": "npm run format:check && npm run lint && npm run test:coverage",
+    "format:check": "prettier --check .",
+    "format:write": "prettier --write .",
+    "lint": "npm run lint --workspaces --if-present",
+    "lint:fix": "npm run lint:fix --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:coverage": "npm run test:coverage --workspaces --if-present",
+    "prepare": "husky"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PT-Meeting-Sampai-Malam-Konsultasi/rusuh-core.git"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.1",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-import-resolver-alias": "^1.1.2",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-jest": "^28.9.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.10",
+    "prettier": "^3.5.0"
+  },
+  "lint-staged": {
+    "*.{js,cjs,json,yaml,yml,md}": [
+      "prettier --write"
+    ],
+    "*.{js,cjs}": [
+      "eslint --fix"
+    ]
+  }
+}
