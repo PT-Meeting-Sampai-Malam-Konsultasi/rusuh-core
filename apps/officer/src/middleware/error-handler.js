@@ -1,8 +1,12 @@
 const Boom = require('@hapi/boom');
 const defaultPlatform = require('@/platform/common');
+const { officerProblem, isKnownCode } = require('@/errors');
 
 /**
  * Creates the terminal Express error handler with safe client responses.
+ * Errors carrying a machine code in `data.code` (repo/officer codes) are
+ * rendered as Problem JSON (RFC 9457); everything else keeps the Boom
+ * payload / generic 500 shape.
  *
  * @param {object} options - Error-handler dependencies.
  * @param {object} [options.platform] - Platform logging implementation.
@@ -20,12 +24,19 @@ function createErrorHandler({ platform = defaultPlatform } = {}) {
     } else if (isMalformedJson) {
       boomError = Boom.badRequest('Malformed JSON request body');
     }
-    const statusCode = boomError?.output?.statusCode || 500;
-    const body = boomError?.output?.payload || {
-      statusCode,
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred'
-    };
+
+    const code = boomError?.data?.code || (error && typeof error.code === 'string' ? error.code : null);
+    const knownCode = code && isKnownCode(code) ? code : null;
+    const statusCode = knownCode
+      ? officerProblem(knownCode, boomError?.message || error.message).status
+      : boomError?.output?.statusCode || 500;
+    const body = knownCode
+      ? officerProblem(knownCode, boomError?.message || error.message, boomError?.data?.extra || {})
+      : boomError?.output?.payload || {
+          statusCode,
+          error: 'Internal Server Error',
+          message: 'An unexpected error occurred'
+        };
 
     try {
       const logger = platform.LoggerBuilder?.getLogger?.();
