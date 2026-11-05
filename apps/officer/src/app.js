@@ -1,4 +1,4 @@
-require('module-alias/register');
+require('./alias');
 
 const express = require('express');
 const defaultPlatform = require('@/platform/common');
