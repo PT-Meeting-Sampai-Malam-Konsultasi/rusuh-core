@@ -1,10 +1,11 @@
-require('module-alias/register');
+require('./alias');
 require('dotenv').config();
 
 const http = require('http');
 const defaultPlatform = require('@/platform/common');
 const { loadEnvironment } = require('@/config/environment');
 const { createApp } = require('@/app');
+const { createDependencies } = require('@/infrastructure/dependencies');
 
 /**
  * Starts the HTTP server and registers controlled shutdown handlers.
@@ -13,7 +14,8 @@ const { createApp } = require('@/app');
  */
 function startServer() {
   const config = loadEnvironment();
-  const app = createApp({ config });
+  const dependencies = createDependencies(config);
+  const app = createApp({ config, dependencies });
   const server = http.createServer(app);
   let shuttingDown = false;
 
