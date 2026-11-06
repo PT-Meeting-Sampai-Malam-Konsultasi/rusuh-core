@@ -2,7 +2,7 @@
 
 Node.js monorepo for the rusuh ticket-booking backend (tender evaluation).
 Services: auth, core, payment, notification, officer, admin (Go queue lives in
-`rusuh-queue`, owned by David).
+[`rusuh-queue`](https://github.com/PT-Meeting-Sampai-Malam-Konsultasi/rusuh-queue)).
 
 ## Stack
 
@@ -40,5 +40,6 @@ Per-service: `cd apps/<name> && npm run check` (format + lint + tests + coverage
 - `rusuh-documentation`: ADR-0001–0026, `api/openapi.yaml` (living contract),
   `architecture/hld-rusuh-core.md`, `architecture/lld-01`–`lld-06`, `architecture/arsitektur-rusuh-core.md`.
 - Decisions log: `keputusan-diskusi-rusuh-core-2026-10-27.md` (goals workspace).
-- Queue-module (Go) is David's domain; this repo only implements the Node modules
-  and the inter-service contracts (admission events via SQS, empty-slot events).
+- Queue-module (Go) lives in [`rusuh-queue`](https://github.com/PT-Meeting-Sampai-Malam-Konsultasi/rusuh-queue);
+  this repo only implements the Node modules and the inter-service contracts
+  (admission events via SQS, empty-slot events).
