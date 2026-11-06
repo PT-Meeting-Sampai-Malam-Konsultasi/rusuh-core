@@ -3,7 +3,7 @@ const { ERROR_CODES, problem } = require('@rusuh/contracts');
 /**
  * Extra Problem codes used by core-module that are not in @rusuh/contracts
  * (the yaml ErrorCode enum). Kept here (not in packages/*) because the
- * contracts package is shared and owned by the monorepo init.
+ * contracts package is shared across the monorepo.
  */
 const EXTRA_CODES = Object.freeze({
   VALIDATION_FAILED: { status: 400, title: 'Data tidak valid' },
