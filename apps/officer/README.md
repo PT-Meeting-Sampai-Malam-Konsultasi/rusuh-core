@@ -79,7 +79,7 @@ idempotent, see above), `TIKET_TIDAK_BERLAKU` (409), `SERVICE_UNAVAILABLE`
 - **KMS envelope.** NIK decryption uses a local 32-byte key
   (`NIK_ENCRYPTION_KEY`, dev/test stand-in). Production must use the KMS
   envelope (D24); the ciphertext format is identical.
-- **Assumed tickets schema** (owned by core-module, LLD-02). The officer reads:
+- **Assumed tickets schema** (LLD-02; implemented in core-module). The officer reads:
   `tickets(id, public_code, booking_id, event_id, category_id, category_name,
 gate, seating, holder_name, nik_masked, nik_hmac, nik_cipher, status,
 used_at, used_by, issued_at)`, `events(id, name, date)`,

@@ -3,7 +3,7 @@
  * action. The full NIK is NEVER written here — only the action + nik_masked
  * (the log records THAT a full NIK was viewed, not its value).
  *
- * Assumed schema (owned by core-module):
+ * Assumed schema (LLD-02; implemented in core-module):
  *   audit_log(id BIGSERIAL, created_at TIMESTAMPTZ, actor_account_id TEXT,
  *     actor_role TEXT, action TEXT, ticket_id TEXT, booking_id TEXT,
  *     event_id TEXT, nik_masked TEXT, details JSONB)

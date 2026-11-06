@@ -3,7 +3,7 @@ const { Pool } = require('pg');
 /**
  * Ticket store (Postgres is the source of truth for tickets, D19).
  *
- * Assumed schema (owned by core-module, LLD-02 — see README for the DDL):
+ * Assumed schema (LLD-02; implemented in core-module — see README for the DDL):
  *   tickets(id, public_code, booking_id, event_id, category_id, category_name,
  *     gate, seating, holder_name, nik_masked, nik_hmac, nik_cipher,
  *     status, used_at, used_by, issued_at)
