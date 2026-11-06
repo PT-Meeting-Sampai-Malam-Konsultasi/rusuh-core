@@ -40,7 +40,7 @@ Errors are RFC 9457 Problem JSON (repo contract, `api/openapi.yaml`).
 - Effective CAP = min(chosen cap, infra cap). Infra cap = load-test breaking
   point x 0.75. Tier (1x/3x/10x) is a shortcut: a tier without an explicit
   cap computes total stock x multiplier and saves it.
-- `cap = 0` is PAUSE (no new admission, David's model, item 13, 6 Nov).
+- `cap = 0` is PAUSE (no new admission; pause = cap=0, item 13, 6 Nov).
   Negative cap is rejected (400).
 - CAP lives in the event model (Postgres), never in Valkey (model event,
   ADR-0022). Core uses the effective CAP to compute empty slots + publish
