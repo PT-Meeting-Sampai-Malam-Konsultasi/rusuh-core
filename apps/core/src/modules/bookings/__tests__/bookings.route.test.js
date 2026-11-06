@@ -205,7 +205,7 @@ describe('bookings journey (D5)', () => {
     expect(await deps.store.listTicketsByAccount('acc_01')).toHaveLength(1);
   });
 
-  it('returns 404 for a booking owned by another account', async () => {
+  it('returns 404 for a booking belonging to another account', async () => {
     const { app, admissionToken, accountToken } = await createTestApp();
     const headers = { Authorization: `Bearer ${accountToken}`, 'X-Admission-Token': admissionToken };
     const validationToken = await validateAttendee(app, headers);
