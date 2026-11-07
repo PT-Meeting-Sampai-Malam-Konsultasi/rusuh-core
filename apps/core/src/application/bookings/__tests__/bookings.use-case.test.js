@@ -27,14 +27,14 @@ function makeValidationToken() {
   return validationToken;
 }
 
-function buildUseCase() {
+function buildUseCase({ payment } = {}) {
   const store = new MemoryStore();
   const stock = new MemoryStock();
   const eventBus = new MemoryEventBus();
   const useCase = createBookingUseCase({
     store,
     stock,
-    payment: {
+    payment: payment || {
       isStub: false,
       createSnap: async ({ orderId }) => ({ orderId, snapToken: 'snap-1', redirectUrl: 'https://pay.example/1' }),
       getStatus: async () => ({ status: 'pending', grossAmount: 0, transactionId: null, paymentType: null }),
@@ -143,5 +143,264 @@ describe('booking use case (state transitions)', () => {
     expect(deps.auth.requireAccount).toBeDefined();
     expect(deps.sweeper).toBeDefined();
     expect(deps.admissionConsumer).toBeDefined();
+  });
+
+  it('reconcileOrphans is a no-op placeholder until the Valkey scan is wired', async () => {
+    const { useCase } = buildUseCase();
+    await expect(useCase.reconcileOrphans()).resolves.toEqual({
+      released: 0,
+      note: 'Valkey scan not wired (follow-up)'
+    });
+  });
+});
+
+describe('booking use case (error paths)', () => {
+  it('createBookingUseCase requires mayAccessBooking', () => {
+    const store = new MemoryStore();
+    expect(() =>
+      createBookingUseCase({
+        store,
+        stock: new MemoryStock(),
+        payment: {},
+        eventBus: new MemoryEventBus(),
+        nikHmacKey: 'k',
+        nikEncryptionKey: NIK_KEY,
+        qrKey: 'q',
+        fees: FEES
+      })
+    ).toThrow('createBookingUseCase requires mayAccessBooking');
+  });
+
+  it('createBooking rejects an unknown event, an empty ticket list, and >3 tickets', async () => {
+    const { useCase } = buildUseCase();
+    await expect(
+      useCase.createBooking(ACCOUNT, ADMISSION, { eventId: 'evt_missing', tickets: [] })
+    ).rejects.toMatchObject({
+      code: 'NOT_FOUND'
+    });
+    await expect(
+      useCase.createBooking(ACCOUNT, ADMISSION, { eventId: 'evt_2026_gbk', tickets: [] })
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED'
+    });
+    const token = makeValidationToken();
+    const four = {
+      eventId: 'evt_2026_gbk',
+      tickets: [1, 2, 3, 4].map(() => ({ categoryId: 'cat_vip', validationToken: token }))
+    };
+    await expect(useCase.createBooking(ACCOUNT, ADMISSION, four)).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+
+  it('createBooking rejects two attendees with the same NIK (DUPLICATE_NIK)', async () => {
+    const { useCase } = buildUseCase();
+    const token = makeValidationToken();
+    const body = {
+      eventId: 'evt_2026_gbk',
+      tickets: [
+        { categoryId: 'cat_vip', validationToken: token },
+        { categoryId: 'cat_vip', validationToken: token }
+      ]
+    };
+    await expect(useCase.createBooking(ACCOUNT, ADMISSION, body)).rejects.toMatchObject({ code: 'DUPLICATE_NIK' });
+  });
+
+  it('createBooking soft-checks stock (CATEGORY_SOLD_OUT) and the NIK quota (NIK_SEAT_TAKEN)', async () => {
+    const { stock, useCase } = buildUseCase();
+    // Drain VIP stock (500 seats) so the soft check fails.
+    await stock.checkAndHold('evt_2026_gbk', [{ categoryId: 'cat_vip', qty: 500, nikHmacs: [] }]);
+    await expect(useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()))).rejects.toMatchObject({
+      code: 'CATEGORY_SOLD_OUT'
+    });
+
+    const second = buildUseCase();
+    // Fill the NIK quota (3 seats) so the soft check fails.
+    const nikHmac = hmacNik(NIK, 'test-hmac-key');
+    await second.stock.checkAndHold('evt_2026_gbk', [{ categoryId: 'cat_vip', qty: 3, nikHmacs: [nikHmac] }]);
+    await expect(
+      second.useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()))
+    ).rejects.toMatchObject({
+      code: 'NIK_SEAT_TAKEN'
+    });
+  });
+
+  it('getBooking throws 404 for a missing booking', async () => {
+    const { useCase } = buildUseCase();
+    await expect(useCase.getBooking('bk_missing', { account: { sub: 'acc_1' } })).rejects.toMatchObject({
+      code: 'NOT_FOUND'
+    });
+  });
+
+  it('enterPayment refuses a PAID booking and an expired SELECTION booking (BOOKING_NOT_HELD)', async () => {
+    const { store, stock, useCase } = buildUseCase();
+    await stock.setAdmission(
+      'adm_1',
+      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1', max_tickets: 3 },
+      60000
+    );
+    const { booking } = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+    const caller = { account: { sub: 'acc_1' }, admission: { token: 'adm_1' } };
+    await useCase.enterPayment(booking.bookingId, caller);
+    await useCase.confirmPayment(booking.bookingId, {
+      orderId: `${booking.bookingId}-1`,
+      transactionId: 'txn_1',
+      transactionStatus: 'settlement',
+      paymentType: 'gopay',
+      grossAmount: 3548300
+    });
+    expect((await store.getBooking(booking.bookingId)).status).toBe('PAID');
+    await expect(useCase.enterPayment(booking.bookingId, caller)).rejects.toMatchObject({ code: 'BOOKING_NOT_HELD' });
+
+    const second = buildUseCase();
+    const created = await second.useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+    await second.store.updateBooking(created.booking.bookingId, {
+      expiresAt: new Date(Date.now() - 1000).toISOString()
+    });
+    await expect(second.useCase.enterPayment(created.booking.bookingId, caller)).rejects.toMatchObject({
+      code: 'BOOKING_NOT_HELD'
+    });
+  });
+
+  it('enterPayment maps a failed Lua hold to CATEGORY_SOLD_OUT / NIK_SEAT_TAKEN', async () => {
+    const { stock, useCase } = buildUseCase();
+    await stock.setAdmission(
+      'adm_1',
+      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1', max_tickets: 3 },
+      60000
+    );
+    const caller = { account: { sub: 'acc_1' }, admission: { token: 'adm_1' } };
+
+    const soldOut = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+    await stock.checkAndHold('evt_2026_gbk', [{ categoryId: 'cat_vip', qty: 500, nikHmacs: [] }]);
+    await expect(useCase.enterPayment(soldOut.booking.bookingId, caller)).rejects.toMatchObject({
+      code: 'CATEGORY_SOLD_OUT'
+    });
+
+    const second = buildUseCase();
+    await second.stock.setAdmission(
+      'adm_1',
+      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1', max_tickets: 3 },
+      60000
+    );
+    const quota = await second.useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+    const nikHmac = hmacNik(NIK, 'test-hmac-key');
+    await second.stock.checkAndHold('evt_2026_gbk', [{ categoryId: 'cat_vip', qty: 3, nikHmacs: [nikHmac] }]);
+    await expect(second.useCase.enterPayment(quota.booking.bookingId, caller)).rejects.toMatchObject({
+      code: 'NIK_SEAT_TAKEN'
+    });
+  });
+
+  it('enterPayment releases the hold and refuses when the DB transition races (BOOKING_NOT_HELD)', async () => {
+    const { store, stock, useCase } = buildUseCase();
+    await stock.setAdmission(
+      'adm_1',
+      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1', max_tickets: 3 },
+      60000
+    );
+    const { booking } = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+    const availableBefore = await stock.getAvailable('evt_2026_gbk', 'cat_vip');
+    store.updateBookingStatus = async () => null; // someone else transitioned it meanwhile
+    const caller = { account: { sub: 'acc_1' }, admission: { token: 'adm_1' } };
+    await expect(useCase.enterPayment(booking.bookingId, caller)).rejects.toMatchObject({ code: 'BOOKING_NOT_HELD' });
+    // The hold we just made was released.
+    expect(await stock.getAvailable('evt_2026_gbk', 'cat_vip')).toBe(availableBefore);
+  });
+
+  it('enterPayment returns 503 when Snap creation fails (retryable)', async () => {
+    const { stock, useCase } = buildUseCase({
+      payment: {
+        isStub: false,
+        createSnap: async () => {
+          throw new Error('midtrans down');
+        },
+        getStatus: async () => null,
+        expire: async () => {}
+      }
+    });
+    await stock.setAdmission(
+      'adm_1',
+      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1', max_tickets: 3 },
+      60000
+    );
+    const { booking } = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+    const caller = { account: { sub: 'acc_1' }, admission: { token: 'adm_1' } };
+    const error = await useCase.enterPayment(booking.bookingId, caller).catch((e) => e);
+    expect(error.code).toBe('INTERNAL_ERROR');
+    expect(error.status).toBe(503);
+  });
+
+  it('checkStatus throws 404 for a missing booking and expires on an expire status', async () => {
+    const { useCase } = buildUseCase();
+    await expect(useCase.checkStatus('bk_missing', { account: { sub: 'acc_1' } })).rejects.toMatchObject({
+      code: 'NOT_FOUND'
+    });
+
+    const expiring = buildUseCase({
+      payment: {
+        isStub: false,
+        createSnap: async ({ orderId }) => ({ orderId, snapToken: 'snap-1', redirectUrl: 'https://pay.example/1' }),
+        getStatus: async () => ({
+          status: 'expire',
+          grossAmount: 3548300,
+          transactionId: 'txn_1',
+          paymentType: 'gopay'
+        }),
+        expire: async () => {}
+      }
+    });
+    await expiring.stock.setAdmission(
+      'adm_1',
+      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1', max_tickets: 3 },
+      60000
+    );
+    const { booking } = await expiring.useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+    const caller = { account: { sub: 'acc_1' }, admission: { token: 'adm_1' } };
+    await expiring.useCase.enterPayment(booking.bookingId, caller);
+    const checked = await expiring.useCase.checkStatus(booking.bookingId, caller);
+    expect(checked.status).toBe('EXPIRED');
+  });
+
+  it('confirmPayment rejects an amount mismatch and never resurrects', async () => {
+    const { store, stock, useCase } = buildUseCase();
+    await stock.setAdmission(
+      'adm_1',
+      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1', max_tickets: 3 },
+      60000
+    );
+    const { booking } = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+    const caller = { account: { sub: 'acc_1' }, admission: { token: 'adm_1' } };
+    await useCase.enterPayment(booking.bookingId, caller);
+    const result = await useCase.confirmPayment(booking.bookingId, {
+      orderId: `${booking.bookingId}-1`,
+      transactionId: 'txn_1',
+      transactionStatus: 'settlement',
+      paymentType: 'gopay',
+      grossAmount: 1
+    });
+    expect(result).toEqual({ handled: false, reason: 'amount_mismatch' });
+    expect((await store.getBooking(booking.bookingId)).status).toBe('PAYMENT_PENDING');
+  });
+
+  it('expireBooking still expires when the Midtrans expire call fails (best-effort)', async () => {
+    const { store, stock, useCase } = buildUseCase({
+      payment: {
+        isStub: false,
+        createSnap: async ({ orderId }) => ({ orderId, snapToken: 'snap-1', redirectUrl: 'https://pay.example/1' }),
+        getStatus: async () => null,
+        expire: async () => {
+          throw new Error('midtrans down');
+        }
+      }
+    });
+    await stock.setAdmission(
+      'adm_1',
+      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1', max_tickets: 3 },
+      60000
+    );
+    const { booking } = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+    const caller = { account: { sub: 'acc_1' }, admission: { token: 'adm_1' } };
+    await useCase.enterPayment(booking.bookingId, caller);
+    const held = await store.getBooking(booking.bookingId);
+    const expired = await useCase.expireBooking(held, 'expired');
+    expect(expired.status).toBe('EXPIRED');
   });
 });
