@@ -21,6 +21,14 @@ describe('nik-crypto', () => {
     expect(() => nikCrypto.decrypt('not-a-cipher')).toThrow('Malformed NIK ciphertext');
   });
 
+  it('rejects a ciphertext missing the iv part', () => {
+    expect(() => nikCrypto.decrypt(':ZGF0YQ==:dGFn')).toThrow('Malformed NIK ciphertext');
+  });
+
+  it('rejects a ciphertext missing the auth tag part', () => {
+    expect(() => nikCrypto.decrypt('aXY6ZGF0YQ==')).toThrow('Malformed NIK ciphertext');
+  });
+
   it('rejects a key that is not 32 bytes', () => {
     expect(() => createNikCrypto({ key: Buffer.alloc(16, 1) })).toThrow('32-byte key');
   });

@@ -11,7 +11,7 @@ const environmentSchema = Joi.object({
   AUTH_PUBLIC_KEYS_JSON: Joi.string().optional(),
   AUTH_AUDIENCE: Joi.string().optional(),
   AUTH_ISSUER: Joi.string().optional(),
-  CORS_ORIGINS: Joi.string().optional()
+  CORS_ORIGINS: Joi.string().allow('').optional()
 }).unknown(true);
 
 // Default CORS origins when CORS_ORIGINS is unset or empty: the production

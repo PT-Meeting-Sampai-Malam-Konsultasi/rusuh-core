@@ -2,6 +2,19 @@ const { createOfficerUseCase } = require('../officer.use-case');
 const { TEST_NIK, makeTicket, makeEvent, makeOfficerDeps, todayJakarta } = require('./test-fixtures');
 
 describe('officer service', () => {
+  it('throws when a required dependency is missing', () => {
+    expect(() => createOfficerUseCase({})).toThrow(
+      'createOfficerUseCase requires ticketStore, auditStore and nikCrypto'
+    );
+    const deps = makeOfficerDeps();
+    expect(() => createOfficerUseCase({ ticketStore: deps.ticketStore })).toThrow(
+      'createOfficerUseCase requires ticketStore, auditStore and nikCrypto'
+    );
+    expect(() => createOfficerUseCase({ ticketStore: deps.ticketStore, auditStore: deps.auditStore })).toThrow(
+      'createOfficerUseCase requires ticketStore, auditStore and nikCrypto'
+    );
+  });
+
   it('lookup returns the masked ticket (never the full NIK)', async () => {
     const deps = makeOfficerDeps();
     const service = createOfficerUseCase(deps);
