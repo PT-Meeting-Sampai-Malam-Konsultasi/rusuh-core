@@ -5,7 +5,17 @@ const environmentSchema = Joi.object({
   PORT: Joi.number().port().default(8081),
   BODY_LIMIT: Joi.string().default('100kb'),
   ENABLE_DUPLICATE_JSON_KEY_VALIDATION: Joi.boolean().truthy('true').falsy('false').default(false),
-  GRACEFUL_SHUTDOWN_TIMEOUT_MS: Joi.number().integer().positive().default(10000)
+  GRACEFUL_SHUTDOWN_TIMEOUT_MS: Joi.number().integer().positive().default(10000),
+  // Auth-module dependencies (all optional: when unset the service falls
+  // back to in-memory adapters, so it starts without Postgres/Valkey/AWS).
+  DATABASE_URL: Joi.string().uri().optional(),
+  VALKEY_URL: Joi.string().uri().optional(),
+  SQS_QUEUE_URL: Joi.string().uri().optional(),
+  AWS_REGION: Joi.string().default('ap-southeast-3'),
+  AUTH_JWT_PRIVATE_KEY_JWK: Joi.string().optional(),
+  AUTH_JWT_KID: Joi.string().optional(),
+  AUTH_JWT_PUBLIC_KEYS_JWKS: Joi.string().optional(),
+  OTP_SECRET: Joi.string().optional()
 }).unknown(true);
 
 /**
@@ -31,7 +41,15 @@ function loadEnvironment(environment = process.env) {
     port: value.PORT,
     bodyLimit: value.BODY_LIMIT,
     enableDuplicateJsonKeyValidation: value.ENABLE_DUPLICATE_JSON_KEY_VALIDATION,
-    gracefulShutdownTimeoutMs: value.GRACEFUL_SHUTDOWN_TIMEOUT_MS
+    gracefulShutdownTimeoutMs: value.GRACEFUL_SHUTDOWN_TIMEOUT_MS,
+    databaseUrl: value.DATABASE_URL,
+    valkeyUrl: value.VALKEY_URL,
+    sqsQueueUrl: value.SQS_QUEUE_URL,
+    awsRegion: value.AWS_REGION,
+    jwtPrivateKeyJwk: value.AUTH_JWT_PRIVATE_KEY_JWK,
+    jwtKid: value.AUTH_JWT_KID,
+    jwtPublicKeysJwks: value.AUTH_JWT_PUBLIC_KEYS_JWKS,
+    otpSecret: value.OTP_SECRET
   };
 }
 

@@ -1,8 +1,10 @@
-const Boom = require('@hapi/boom');
 const defaultPlatform = require('@/platform/common');
+const { toProblem } = require('@/lib/api-error');
 
 /**
- * Creates the terminal Express error handler with safe client responses.
+ * Creates the terminal Express error handler. All errors are rendered as
+ * RFC 9457 Problem JSON (repo contract), with the request correlation id
+ * as traceId when available.
  *
  * @param {object} options - Error-handler dependencies.
  * @param {object} [options.platform] - Platform logging implementation.
@@ -14,32 +16,25 @@ function createErrorHandler({ platform = defaultPlatform } = {}) {
     if (response.headersSent) return;
 
     const isMalformedJson = error instanceof SyntaxError && Object.hasOwn(error, 'body');
-    let boomError = null;
-    if (Boom.isBoom(error)) {
-      boomError = error;
-    } else if (isMalformedJson) {
-      boomError = Boom.badRequest('Malformed JSON request body');
-    }
-    const statusCode = boomError?.output?.statusCode || 500;
-    const body = boomError?.output?.payload || {
-      statusCode,
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred'
-    };
+    const effective = isMalformedJson
+      ? Object.assign(new Error('Malformed JSON request body'), { data: { code: 'BAD_REQUEST' } })
+      : error;
+    const traceId = request.correlationId || request.headers['x-correlation-id'];
+    const { status, body } = toProblem(effective, traceId);
 
     try {
       const logger = platform.LoggerBuilder?.getLogger?.();
       const metadata = platform.LoggerBuilder?.getMetadataFromRequest?.(request) || {};
       logger
         ?.addTags?.(['error-handler'])
-        ?.addData?.({ ...metadata, statusCode, error: error.message })
+        ?.addData?.({ ...metadata, statusCode: status, error: error.message })
         ?.error?.('API request failed');
     } catch (_loggingError) {
       // Logging failures must not prevent a safe error response.
     }
 
     response.locals.skipResponseEnvelope = true;
-    response.status(statusCode).json(body);
+    response.status(status).json(body);
   };
 }
 
