@@ -1,6 +1,6 @@
 const { createTokenService, hashRefreshToken } = require('../tokens/token-service');
-const { createMemoryDenylist } = require('../valkey/memory-denylist');
-const { createMemoryMailer } = require('../mailer/memory-mailer');
+const { createMemoryDenylist } = require('../cache/memory-denylist');
+const { createMemoryMailer } = require('../messaging/memory-mailer');
 
 describe('token-service', () => {
   it('signs and verifies an access token (15 min, no event claim)', async () => {

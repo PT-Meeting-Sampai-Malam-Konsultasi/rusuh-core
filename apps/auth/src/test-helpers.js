@@ -1,6 +1,6 @@
 const request = require('supertest');
-const { loadEnvironment } = require('./config/environment');
-const { createDependencies } = require('./infrastructure/dependencies');
+const { loadEnvironment } = require('./infrastructure/config/environment');
+const { createDependencies } = require('./container');
 const { createApp } = require('./app');
 
 /**

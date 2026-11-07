@@ -3,9 +3,9 @@ require('dotenv').config();
 
 const http = require('http');
 const defaultPlatform = require('@/platform/common');
-const { loadEnvironment } = require('@/config/environment');
+const { loadEnvironment } = require('@/infrastructure/config/environment');
 const { createApp } = require('@/app');
-const { createDependencies } = require('@/infrastructure/dependencies');
+const { createDependencies } = require('@/container');
 
 /**
  * Starts the HTTP server and registers controlled shutdown handlers.
