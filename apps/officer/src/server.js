@@ -1,4 +1,9 @@
-require('./alias');
+// Register the `@` alias explicitly: in the npm-workspaces monorepo the
+// hoisted module-alias would otherwise read the ROOT package.json (which has
+// no _moduleAliases) instead of this app's package.json, so `@/…` requires
+// would fail. NOTE: this is a monorepo-wide init issue — every app needs the
+// same explicit registration (see report).
+require('module-alias').addAlias('@', __dirname);
 require('dotenv').config();
 
 const http = require('http');

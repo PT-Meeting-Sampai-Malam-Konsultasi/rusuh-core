@@ -1,4 +1,6 @@
-require('./alias');
+// See server.js: register `@` explicitly (monorepo hoisting; the hoisted
+// module-alias would read the ROOT package.json, which has no _moduleAliases).
+require('module-alias').addAlias('@', __dirname);
 
 const express = require('express');
 const defaultPlatform = require('@/platform/common');
@@ -15,9 +17,10 @@ const { mountRoutes } = require('@/routes');
  * @param {object} options.config - Validated service configuration.
  * @param {object} [options.platform] - Platform helper implementation.
  * @param {Function} [options.isReady] - Optional readiness predicate.
+ * @param {object} [options.officerDeps] - Injected officer dependencies (tests).
  * @returns {import('express').Express} Configured Express application.
  */
-function createApp({ config, platform = defaultPlatform, isReady } = {}) {
+function createApp({ config, platform = defaultPlatform, isReady, officerDeps } = {}) {
   if (!config) throw new Error('createApp requires validated configuration');
 
   const app = express();
@@ -31,7 +34,7 @@ function createApp({ config, platform = defaultPlatform, isReady } = {}) {
   );
   app.use(express.urlencoded({ extended: true, limit: config.bodyLimit }));
 
-  mountRoutes(app, { platform, isReady });
+  mountRoutes(app, { isReady, config, officerDeps });
   app.use(notFound);
   app.use(createErrorHandler({ platform }));
 
