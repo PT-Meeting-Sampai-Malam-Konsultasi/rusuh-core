@@ -1,6 +1,6 @@
 module.exports = {
   clearMocks: true,
-  collectCoverageFrom: ['src/**/*.js', '!src/server.js'],
+  collectCoverageFrom: ['src/**/*.js', '!src/server.js', '!src/test-app.js'],
   coverageDirectory: 'coverage',
   coverageReporters: ['json', 'text', 'lcov', 'cobertura'],
   coverageProvider: 'v8',
