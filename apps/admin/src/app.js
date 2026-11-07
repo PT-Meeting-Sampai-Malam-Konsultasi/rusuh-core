@@ -1,6 +1,8 @@
 require('./alias');
 
 const express = require('express');
+const helmet = require('helmet');
+const cors = require('cors');
 const defaultPlatform = require('@/platform/common');
 const { createDuplicateKeyVerifier } = require('@/presentation/http/middleware/duplicate-json-keys');
 const { createResponseMiddleware } = require('@/presentation/http/middleware/response');
@@ -25,6 +27,11 @@ function createApp({ config, platform = defaultPlatform, isReady, store, auth, q
 
   const app = express();
   app.disable('x-powered-by');
+  // Security headers (helmet defaults; this is a JSON API, no HTML is
+  // rendered) and CORS (origins from config.corsOrigins, see
+  // infrastructure/config/environment.js). Both run before the routes.
+  app.use(helmet());
+  app.use(cors({ origin: config.corsOrigins }));
   app.use(createResponseMiddleware({ platform }));
   app.use(
     express.json({

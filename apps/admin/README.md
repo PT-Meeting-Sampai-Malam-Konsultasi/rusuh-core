@@ -71,6 +71,17 @@ as 0. A fee change only applies to new bookings.
 - Every admin mutation is written to `audit_log` (DB) and to the
   operational log with masked NIK (Q40).
 
+## Security
+
+- `helmet` (default settings) sets the security headers on every
+  response (`x-content-type-options: nosniff`, `x-frame-options`,
+  `strict-transport-security`, …). This is a JSON API — no HTML is
+  rendered, so the defaults are fine.
+- `cors` allows only the origins in `CORS_ORIGINS` (comma-separated).
+  Default when unset/empty: `https://rusuh-tiket.web.id`,
+  `https://www.rusuh-tiket.web.id`, `http://localhost:3000`,
+  `http://localhost:5173`.
+
 ## Design
 
 - LLD: `rusuh-documentation/architecture/lld-05-officer-admin.md` (§5–§6)
