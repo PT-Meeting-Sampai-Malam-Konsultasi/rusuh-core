@@ -1,0 +1,122 @@
+# Local real-test infrastructure for rusuh-core (NOT a smoke test).
+#
+# What runs here (Docker) vs on the host:
+#   Docker: Postgres 16, Valkey 7.2, LocalStack (SQS + SES + S3), Dukcapil mock.
+#   Host:   the 6 rusuh-core apps (npm start, ports 8081-8086) — so you can
+#           edit code and restart them like a normal Node dev.
+#
+# Prereqs: Docker Desktop running; rusuh-mock cloned NEXT TO rusuh-core
+# (../rusuh-mock) so the dukcapil image can be built from it.
+# If you do not have rusuh-mock, comment out the `dukcapil` service below
+# and run the mock on the host instead:
+#   cd ../rusuh-mock/service-dukcapil && PORT=18082 npm start
+#
+# Usage:
+#   docker compose -f local-dev/docker-compose.yml up -d
+#   bash local-dev/setup-env.sh        # writes apps/*/.env (local values + keys)
+#   # then, in 6 terminals (or one at a time):
+#   cd apps/auth && npm start          # 8081
+#   cd apps/core && npm start          # 8082
+#   cd apps/payment && npm start       # 8083
+#   cd apps/notification && npm start  # 8084
+#   cd apps/officer && npm start       # 8085
+#   cd apps/admin && npm start         # 8086
+#   docker compose -f local-dev/docker-compose.yml down   # stop infra
+#   docker compose -f local-dev/docker-compose.yml down -v  # also wipe data
+
+name: rusuh-local
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: rusuh-postgres
+    environment:
+      POSTGRES_DB: rusuh
+      POSTGRES_USER: rusuh
+      POSTGRES_PASSWORD: rusuh-dev
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Runs ONCE on first init (empty volume). All files use
+      # CREATE TABLE IF NOT EXISTS, so re-running is safe.
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U rusuh -d rusuh']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  valkey:
+    image: valkey/valkey:7.2
+    container_name: rusuh-valkey
+    command: valkey-server --appendonly yes
+    ports:
+      - '6379:6379'
+    volumes:
+      - valkeydata:/data
+    healthcheck:
+      test: ['CMD', 'valkey-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  localstack:
+    image: localstack/localstack:latest
+    container_name: rusuh-localstack
+    environment:
+      SERVICES: sqs,ses,s3
+      AWS_DEFAULT_REGION: ap-southeast-3
+      # LocalStack needs no real credentials; the apps use test/test.
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    ports:
+      - '4566:4566'
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:4566/_localstack/health']
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  # One-shot: creates the SQS queues (+ DLQs), the S3 bucket and the SES
+  # sender identity once LocalStack is healthy. Exits 0 when done.
+  localstack-init:
+    image: amazon/aws-cli:latest
+    container_name: rusuh-localstack-init
+    depends_on:
+      localstack:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: ap-southeast-3
+      AWS_ENDPOINT_URL: http://localstack:4566
+    volumes:
+      - ./localstack-init.sh:/init.sh:ro
+    entrypoint: ['sh', '/init.sh']
+
+  dukcapil:
+    # Mock Dukcapil (rusuh-mock, service-dukcapil). Dockerfile exposes 8080;
+    # published as 18082 so core's default DUKCAPIL_URL matches.
+    build:
+      context: ../../rusuh-mock/service-dukcapil
+      dockerfile: Dockerfile
+    container_name: rusuh-dukcapil
+    environment:
+      NODE_ENV: production
+      PORT: '8080'
+    ports:
+      - '18082:8080'
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://localhost:8080/sys/ping']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+volumes:
+  pgdata:
+  valkeydata:
+  localstack-data:
