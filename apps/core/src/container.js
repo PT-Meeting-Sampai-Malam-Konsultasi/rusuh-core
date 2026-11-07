@@ -161,6 +161,18 @@ function createDefaultDeps(config, overrides = {}) {
     // use case). Kept on the graph so createDeps rebuilds (which spread
     // ...deps into buildUseCases) keep it.
     mayAccessBooking,
+    // Domain keys/config the use cases need (nikHmacKey, qrKey, fees).
+    // They live in config, but they are ALSO kept on the graph top level
+    // so createDeps rebuilds (which spread ...deps into buildUseCases)
+    // keep them. Without this, the rebuilds pass undefined for all three
+    // (the graph only had them nested under config), so with real infra
+    // (Postgres/Valkey/SQS) the rebuilt attendees use case throws in
+    // hmacNik and the rebuilt bookings use case throws in computePrice /
+    // qrPayload. Pre-existing latent bug (same spread shape in the old
+    // deps.js); fixed here, before the local real test.
+    nikHmacKey: config.nikHmacKey,
+    qrKey: config.qrHmacKey,
+    fees: config.fees,
     useCases,
     auth,
     ...workers
