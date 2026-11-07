@@ -61,24 +61,42 @@ Errors are RFC 9457 Problem JSON (`{type, title, status, code, detail, ...}`):
 - The yaml `Session.accessToken` example shows an `evt` claim; the account
   JWT carries no event claim (ADR-0021/0025).
 
-## Layout
+## Layout (Onion / Clean Architecture)
 
 ```
 src/
   alias.js                 @ -> src alias (monorepo-safe, see the file)
-  app.js / server.js       Express app + HTTP server
-  config/environment.js    env vars (DATABASE_URL, VALKEY_URL, SQS_QUEUE_URL, ...)
-  lib/                     api-error (Problem JSON), issue-session
-  middleware/              auth (Bearer JWT), error-handler (Problem JSON)
-  modules/
+  app.js / server.js       Express app + HTTP server (entry points)
+  container.js             COMPOSITION ROOT: builds deps from config
+  test-helpers.js          test app builder (in-memory adapters)
+  domain/                  CENTER: pure business logic, no I/O
+    otp.js                 OTP rules (code, HMAC, constants)
+    ports/                 adapter contracts (JSDoc typedefs):
+                           store, mailer, token-service, denylist, logger
+  application/             use cases (depend on domain ports only)
     otp/                   request + verify (HMAC, device-bound, rate limits)
     session/               refresh (rotation + reuse) + logout
     profile/               getMe + update (name only)
-  infrastructure/
-    store/                 Postgres (pg) + in-memory repository
-    valkey/                jti denylist (ioredis) + in-memory
-    mailer/                SQS OTP job + in-memory
+    health/                liveness + readiness
+    shared/                api-error (Problem JSON), issue-session
+  infrastructure/          adapters (implement the domain ports)
+    config/environment.js  env vars (DATABASE_URL, VALKEY_URL, SQS_QUEUE_URL, ...)
+    persistence/           Postgres (pg) + in-memory repository
+    cache/                 jti denylist (ioredis) + in-memory
+    messaging/             SQS OTP job + in-memory
     tokens/                Ed25519 sign/verify (via @rusuh/auth)
+  presentation/            HTTP (outer): controllers, routes, validation,
+                           middleware (auth Bearer JWT, error-handler)
+  platform/common.js       logger shim (injected by the composition root;
+                           presentation never imports platform/ directly)
 db/migrations/001_auth.sql Postgres schema (accounts, profiles, otp_codes,
                            refresh_tokens, access_tokens, audit_log)
 ```
+
+Dependency rule (enforced by `npm run check:boundaries`, see
+`scripts/check-boundaries.js`): domain imports only node built-ins +
+`@rusuh/contracts`; application imports domain + contracts + npm;
+infrastructure imports domain + application (ports) + `@rusuh/auth` +
+`@rusuh/observability` + npm; presentation imports application + domain +
+contracts + npm — never infrastructure/ and never platform/ (the platform
+shim is injected by the composition root).
