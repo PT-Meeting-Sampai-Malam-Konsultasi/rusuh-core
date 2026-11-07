@@ -144,7 +144,7 @@ npm run check          # prettier + eslint + tests + coverage (must pass)
 
 ## Tests
 
-79 tests, 11 suites (`npm run check` green): signature verification
+124 tests, 18 suites (`npm run check` green): signature verification
 (incl. tampered amounts), dedup cases (duplicate / progression /
 unconfirmed-retry), `order_id` format, expiry (P+10 from attempt 1),
 PAID_AFTER_EXPIRY, Get Status retry / 404 / failure → 500, expireOrder

@@ -13,7 +13,17 @@ function jsonResponse(status, body) {
 const START_TIME = new Date('2026-11-14T03:40:00.000Z');
 const ITEMS = [{ id: 'cat_festival_b', price: 1500000, quantity: 2, name: 'Festival B' }];
 
-function buildService({ fetchImpl } = {}) {
+function chainableLogger() {
+  const logger = {
+    addTags: jest.fn(() => logger),
+    addData: jest.fn(() => logger),
+    info: jest.fn(),
+    error: jest.fn()
+  };
+  return logger;
+}
+
+function buildService({ fetchImpl, logger } = {}) {
   const store = createMemoryStore();
   const midtransClient = createMidtransClient({
     serverKey: 'sk-test',
@@ -27,13 +37,14 @@ function buildService({ fetchImpl } = {}) {
       )
   });
   const metrics = { increment: jest.fn() };
-  const service = createSnapUseCase({ store, midtransClient, metrics, logger: undefined });
-  return { store, service, metrics };
+  const service = createSnapUseCase({ store, midtransClient, metrics, logger });
+  return { store, service, metrics, logger };
 }
 
 describe('createSnapTransaction', () => {
   it('creates attempt 1 with order_id {booking_id}-1 and returns the Snap token', async () => {
-    const { store, service } = buildService();
+    const logger = chainableLogger();
+    const { store, service } = buildService({ logger });
     const result = await service.createSnapTransaction({
       bookingId: 'bk_01',
       grossAmount: 3000000,
@@ -48,6 +59,8 @@ describe('createSnapTransaction', () => {
     const order = await store.getPaymentOrder('bk_01-1');
     expect(order.status).toBe('pending');
     expect(order.snapStartTime).toEqual(START_TIME);
+    expect(logger.info).toHaveBeenCalledWith('Snap transaction created');
+    expect(logger.addData).toHaveBeenCalledWith(expect.objectContaining({ bookingId: 'bk_01', orderId: 'bk_01-1' }));
   });
 
   it('re-create is a NEW attempt inheriting the ORIGINAL snap_start_time (no window extension)', async () => {
@@ -76,7 +89,8 @@ describe('createSnapTransaction', () => {
     const fetchImpl = mockFetch(async () =>
       jsonResponse(500, { status_code: '500', status_message: 'Internal error' })
     );
-    const { store, service, metrics } = buildService({ fetchImpl });
+    const logger = chainableLogger();
+    const { store, service, metrics } = buildService({ fetchImpl, logger });
     await expect(
       service.createSnapTransaction({
         bookingId: 'bk_01',
@@ -88,6 +102,8 @@ describe('createSnapTransaction', () => {
     const order = await store.getPaymentOrder('bk_01-1');
     expect(order.status).toBe('created');
     expect(metrics.increment).toHaveBeenCalledWith('midtrans_5xx_count');
+    expect(logger.error).toHaveBeenCalledWith('Snap creation failed');
+    expect(logger.addTags).toHaveBeenCalledWith(['snap', 'create-failed']);
   });
 
   it('rejects invalid input', async () => {

@@ -9,18 +9,28 @@ function jsonResponse(status, body) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
 }
 
-function buildService({ fetchImpl, getStatusMaxRetries = 3 } = {}) {
+function chainableLogger() {
+  const logger = {
+    addTags: jest.fn(() => logger),
+    addData: jest.fn(() => logger),
+    info: jest.fn(),
+    error: jest.fn()
+  };
+  return logger;
+}
+
+function buildService({ fetchImpl, getStatusMaxRetries = 3, logger } = {}) {
   const midtransClient = createMidtransClient({ serverKey: 'sk-test', fetchImpl });
   const metrics = { increment: jest.fn() };
   const service = createStatusUseCase({
     midtransClient,
     metrics,
-    logger: undefined,
+    logger,
     getStatusMaxRetries,
     getStatusRetryBaseMs: 0,
     sleep: async () => {}
   });
-  return { service, metrics, fetchImpl };
+  return { service, metrics, fetchImpl, logger };
 }
 
 describe('confirmViaGetStatus', () => {
@@ -110,10 +120,13 @@ describe('expireOrder', () => {
 
   it('returns ok:false (never throws) on 5xx so the sweeper keeps going', async () => {
     const fetchImpl = mockFetch(async () => jsonResponse(500, { status_code: '500' }));
-    const { service } = buildService({ fetchImpl });
+    const logger = chainableLogger();
+    const { service, logger: usedLogger } = buildService({ fetchImpl, logger });
     const result = await service.expireOrder('bk_01-1');
     expect(result.ok).toBe(false);
     expect(result.orderId).toBe('bk_01-1');
+    expect(usedLogger.error).toHaveBeenCalledWith('Expire call failed (best-effort, sweeper continues)');
+    expect(usedLogger.addTags).toHaveBeenCalledWith(['expire', 'failed']);
   });
 
   it('MidtransError is the client error type', () => {

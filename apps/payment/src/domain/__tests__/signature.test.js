@@ -84,5 +84,47 @@ describe('verifySignatureKey', () => {
     expect(
       verifySignatureKey({ orderId: 'bk_01-1', statusCode: '200', grossAmount: '1505000.00', serverKey: SERVER_KEY })
     ).toBe(false);
+    expect(
+      verifySignatureKey({
+        orderId: 'bk_01-1',
+        statusCode: '200',
+        grossAmount: '1505000.00',
+        serverKey: SERVER_KEY,
+        signatureKey: 12345
+      })
+    ).toBe(false);
+  });
+
+  it('rejects an empty or missing server key', () => {
+    expect(
+      verifySignatureKey({
+        orderId: 'bk_01-1',
+        statusCode: '200',
+        grossAmount: '1505000.00',
+        serverKey: '',
+        signatureKey: valid
+      })
+    ).toBe(false);
+    expect(
+      verifySignatureKey({
+        orderId: 'bk_01-1',
+        statusCode: '200',
+        grossAmount: '1505000.00',
+        serverKey: undefined,
+        signatureKey: valid
+      })
+    ).toBe(false);
+  });
+
+  it('rejects a signature whose length differs from the expected one', () => {
+    expect(
+      verifySignatureKey({
+        orderId: 'bk_01-1',
+        statusCode: '200',
+        grossAmount: '1505000.00',
+        serverKey: SERVER_KEY,
+        signatureKey: 'abc'
+      })
+    ).toBe(false);
   });
 });

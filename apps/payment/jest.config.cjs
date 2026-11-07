@@ -4,6 +4,13 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['json', 'text', 'lcov', 'cobertura'],
   coverageProvider: 'v8',
+  // Enforced minimum (team decision, 7 Nov 2026): every metric must stay
+  // >= 80%. Pure JSDoc port files (domain/ports/*.js, `module.exports = {}`)
+  // are included and pull the total down, so the margin above 80% is
+  // intentionally kept comfortable.
+  coverageThreshold: {
+    global: { branches: 80, functions: 80, lines: 80, statements: 80 }
+  },
   detectOpenHandles: true,
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1'

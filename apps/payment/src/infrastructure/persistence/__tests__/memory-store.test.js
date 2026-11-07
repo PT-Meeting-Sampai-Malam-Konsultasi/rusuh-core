@@ -90,6 +90,48 @@ describe('memory store (payment_attempts + callback_log)', () => {
     expect(await store.findPaymentAttempt('tx-unknown')).toBeNull();
   });
 
+  it('upserts a NEW transaction_id by creating it (no existing row)', async () => {
+    const store = createMemoryStore();
+    const created = await store.upsertPaymentAttempt({
+      orderId: 'bk_01-1',
+      bookingId: 'bk_01',
+      transactionId: 'tx-new',
+      transactionStatus: 'pending',
+      paymentType: 'gopay',
+      grossAmount: 3015000,
+      confirmed: false,
+      rawPayload: {}
+    });
+    expect(created.transactionId).toBe('tx-new');
+    expect(created.transactionStatus).toBe('pending');
+    const found = await store.findPaymentAttempt('tx-new');
+    expect(found.transactionId).toBe('tx-new');
+  });
+
+  it('upsert on an existing row only overwrites the fields that are provided', async () => {
+    const store = createMemoryStore();
+    await store.createPaymentAttempt({
+      orderId: 'bk_01-1',
+      bookingId: 'bk_01',
+      transactionId: 'tx-1',
+      transactionStatus: 'pending',
+      paymentType: 'qris',
+      grossAmount: 3015000,
+      confirmed: false,
+      rawPayload: {}
+    });
+    const updated = await store.upsertPaymentAttempt({
+      orderId: 'bk_01-1',
+      bookingId: 'bk_01',
+      transactionId: 'tx-1',
+      transactionStatus: 'deny'
+    });
+    expect(updated.transactionStatus).toBe('deny');
+    expect(updated.paymentType).toBe('qris');
+    expect(updated.grossAmount).toBe(3015000);
+    expect(updated.confirmed).toBe(false);
+  });
+
   it('records callback logs including invalid signatures', async () => {
     const store = createMemoryStore();
     await store.createCallbackLog({
