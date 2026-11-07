@@ -17,8 +17,31 @@ const environmentSchema = Joi.object({
   S3_TICKET_BUCKET: Joi.string().allow('').default(''),
   ADMIN_EMAIL: Joi.string().email().default('admin@rusuh-tiket.web.id'),
   CLAIM_STALE_MINUTES: Joi.number().integer().positive().default(5),
-  WORKER_ENABLED: Joi.boolean().truthy('true').falsy('false').default(true)
+  WORKER_ENABLED: Joi.boolean().truthy('true').falsy('false').default(true),
+  CORS_ORIGINS: Joi.string().allow('').default('')
 }).unknown(true);
+
+const DEFAULT_CORS_ORIGINS = [
+  'https://rusuh-tiket.web.id',
+  'https://www.rusuh-tiket.web.id',
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
+
+/**
+ * Parses a comma-separated CORS origins string. An empty value means the
+ * default origins (production domains + local dev frontends).
+ *
+ * @param {string} value - Raw CORS_ORIGINS value.
+ * @returns {string[]} Origin list.
+ */
+function parseCorsOrigins(value) {
+  const parsed = value
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  return parsed.length > 0 ? parsed : DEFAULT_CORS_ORIGINS;
+}
 
 /**
  * Validates process environment and returns the service runtime configuration.
@@ -56,7 +79,8 @@ function loadEnvironment(environment = process.env) {
     s3: { ticketBucket: value.S3_TICKET_BUCKET },
     adminEmail: value.ADMIN_EMAIL,
     claimStaleMinutes: value.CLAIM_STALE_MINUTES,
-    workerEnabled: value.WORKER_ENABLED
+    workerEnabled: value.WORKER_ENABLED,
+    corsOrigins: parseCorsOrigins(value.CORS_ORIGINS)
   };
 }
 

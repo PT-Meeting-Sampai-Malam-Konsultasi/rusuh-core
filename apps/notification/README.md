@@ -43,6 +43,13 @@ alongside it; graceful shutdown finishes in-flight messages first.
 Set `WORKER_ENABLED=false` to run HTTP-only, or leave the SQS queue URLs
 empty (worker disabled, health still serves).
 
+Security: `helmet()` (default settings) sets the security headers on every
+response, and `cors()` restricts cross-origin access to `CORS_ORIGINS`
+(comma-separated; empty = the default production domains plus local dev
+frontends, see `.env.example`). This service has no public endpoints, so
+CORS has no practical effect here — the wiring is kept consistent with the
+other services.
+
 ## Configuration
 
 See `.env.example`. Production must set `SQS_OTP_QUEUE_URL`,
