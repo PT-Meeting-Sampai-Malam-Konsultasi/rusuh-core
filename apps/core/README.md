@@ -18,6 +18,15 @@ npm run check      # format + lint + tests + coverage
 - LLD: `rusuh-documentation/architecture/lld-0X-*.md`
 - Contract: `rusuh-documentation/api/openapi.yaml`
 
+## Security (helmet + CORS)
+
+`createApp` mounts `helmet()` (default security headers) and `cors()` before
+the routes. The CORS allowlist comes from `CORS_ORIGINS` (comma-separated,
+optional); when unset it defaults to the production web origins
+(`https://rusuh-tiket.web.id`, `https://www.rusuh-tiket.web.id`) plus local
+dev (`http://localhost:3000`, `http://localhost:5173`). See
+`src/infrastructure/config/environment.js` (`corsOrigins`).
+
 ## Structure (Onion / Clean Architecture)
 
 Dependencies point inward only; the rule is enforced by
