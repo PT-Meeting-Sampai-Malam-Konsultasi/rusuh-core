@@ -122,6 +122,17 @@ See `.env.example`. The important ones:
 - `GET_STATUS_MAX_RETRIES` (default 3), `GET_STATUS_RETRY_BASE_MS`
   (default 200), `CORE_NOTIFY_MAX_RETRIES` (3), `CORE_NOTIFY_TIMEOUT_MS`
   (5000), `WEBHOOK_BODY_LIMIT_BYTES` (65536).
+- `CORS_ORIGINS` — comma-separated allowed browser origins; empty = default
+  (`https://rusuh-tiket.web.id`, `https://www.rusuh-tiket.web.id`,
+  `http://localhost:3000`, `http://localhost:5173`).
+
+## Security headers & CORS
+
+`createApp` mounts `helmet()` (default settings: `nosniff`, `frameguard`,
+HSTS, CSP, …) and `cors({ origin: config.corsOrigins })` before any route.
+The only public endpoint is the Midtrans webhook (server-to-server, so
+CORS has no effect on it); helmet still protects the health endpoints and
+any future browser-facing route.
 
 ## Running
 

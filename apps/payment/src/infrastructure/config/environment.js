@@ -1,11 +1,18 @@
 const Joi = require('joi');
 
+// Default CORS origins (browser-facing routes only; the Midtrans webhook
+// is server-to-server and is unaffected by CORS). Used when CORS_ORIGINS
+// is unset or empty.
+const DEFAULT_CORS_ORIGINS =
+  'https://rusuh-tiket.web.id,https://www.rusuh-tiket.web.id,http://localhost:3000,http://localhost:5173';
+
 const environmentSchema = Joi.object({
   NODE_ENV: Joi.string().valid('development', 'test', 'staging', 'production').default('development'),
   PORT: Joi.number().port().default(8083),
   BODY_LIMIT: Joi.string().default('100kb'),
   ENABLE_DUPLICATE_JSON_KEY_VALIDATION: Joi.boolean().truthy('true').falsy('false').default(false),
   GRACEFUL_SHUTDOWN_TIMEOUT_MS: Joi.number().integer().positive().default(10000),
+  CORS_ORIGINS: Joi.string().allow('').default(DEFAULT_CORS_ORIGINS),
   MIDTRANS_SERVER_KEY: Joi.string().allow('').default(''),
   MIDTRANS_SNAP_BASE_URL: Joi.string().uri().default('https://app.sandbox.midtrans.com/snap'),
   MIDTRANS_API_BASE_URL: Joi.string().uri().default('https://api.sandbox.midtrans.com'),
@@ -49,6 +56,11 @@ function loadEnvironment(environment = process.env) {
     bodyLimit: value.BODY_LIMIT,
     enableDuplicateJsonKeyValidation: value.ENABLE_DUPLICATE_JSON_KEY_VALIDATION,
     gracefulShutdownTimeoutMs: value.GRACEFUL_SHUTDOWN_TIMEOUT_MS,
+    // Comma-separated CORS origins; empty/unset falls back to the default list.
+    corsOrigins: (value.CORS_ORIGINS || DEFAULT_CORS_ORIGINS)
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
     midtrans: {
       serverKey: value.MIDTRANS_SERVER_KEY,
       snapBaseUrl: value.MIDTRANS_SNAP_BASE_URL,
