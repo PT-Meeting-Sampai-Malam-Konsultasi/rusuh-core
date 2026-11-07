@@ -1,12 +1,12 @@
-const { createHealthService } = require('@/modules/health/health.service');
+const { createHealthUseCase } = require('@/application/health/health.use-case');
 
-describe('health service', () => {
+describe('health use case', () => {
   test('reports live status', () => {
-    expect(createHealthService().live()).toEqual({ status: 'ok' });
+    expect(createHealthUseCase().live()).toEqual({ status: 'ok' });
   });
 
   test('reports unavailable readiness', async () => {
-    const service = createHealthService({ isReady: async () => false });
-    await expect(service.ready()).resolves.toEqual({ status: 'not_ready' });
+    const useCase = createHealthUseCase({ isReady: async () => false });
+    await expect(useCase.ready()).resolves.toEqual({ status: 'not_ready' });
   });
 });

@@ -1,20 +1,20 @@
-const { problemError } = require('@/lib/problem');
-const { presentBooking, serverNow } = require('@/lib/presenters');
-const { createBookingBody, bookingIdParam, paymentResultBody } = require('./bookings.validation');
+const { problemError } = require('@/domain/problem');
+const { presentBooking, serverNow } = require('@/domain/presenters');
+const { createBookingBody, bookingIdParam, paymentResultBody } = require('../validation/bookings.validation');
 
 /**
  * Creates controllers for the booking endpoints.
  *
- * @param {object} service - Booking service.
+ * @param {object} useCase - Booking use case.
  * @returns {object} Booking endpoint controllers.
  */
-function createBookingsController(service) {
+function createBookingsController(useCase) {
   return {
     createBooking: async (request, response, next) => {
       try {
         const { error, value } = createBookingBody.validate(request.body);
         if (error) throw problemError('VALIDATION_FAILED', 'One or more fields are missing or malformed.');
-        const { booking, created } = await service.createBooking(request.account, request.admission, value);
+        const { booking, created } = await useCase.createBooking(request.account, request.admission, value);
         response.locals.skipResponseEnvelope = true;
         response.status(created ? 201 : 200).json(presentBooking(booking));
       } catch (err) {
@@ -24,7 +24,7 @@ function createBookingsController(service) {
 
     listActiveBookings: async (request, response, next) => {
       try {
-        const bookings = await service.listActiveBookings(request.account.sub);
+        const bookings = await useCase.listActiveBookings(request.account.sub);
         response.locals.skipResponseEnvelope = true;
         response.status(200).json({ items: bookings.map(presentBooking) });
       } catch (err) {
@@ -36,7 +36,7 @@ function createBookingsController(service) {
       try {
         const { error } = bookingIdParam.validate(request.params);
         if (error) throw problemError('VALIDATION_FAILED', 'One or more fields are missing or malformed.');
-        const booking = await service.getBooking(request.params.bookingId, {
+        const booking = await useCase.getBooking(request.params.bookingId, {
           account: request.account,
           admission: request.admission
         });
@@ -51,7 +51,7 @@ function createBookingsController(service) {
       try {
         const { error } = bookingIdParam.validate(request.params);
         if (error) throw problemError('VALIDATION_FAILED', 'One or more fields are missing or malformed.');
-        const result = await service.enterPayment(request.params.bookingId, {
+        const result = await useCase.enterPayment(request.params.bookingId, {
           account: request.account,
           admission: request.admission
         });
@@ -66,7 +66,7 @@ function createBookingsController(service) {
       try {
         const { error } = bookingIdParam.validate(request.params);
         if (error) throw problemError('VALIDATION_FAILED', 'One or more fields are missing or malformed.');
-        const booking = await service.checkStatus(request.params.bookingId, {
+        const booking = await useCase.checkStatus(request.params.bookingId, {
           account: request.account,
           admission: request.admission
         });
@@ -88,7 +88,7 @@ function createBookingsController(service) {
         if (paramError) throw problemError('VALIDATION_FAILED', 'One or more fields are missing or malformed.');
         const { error, value } = paymentResultBody.validate(request.body);
         if (error) throw problemError('VALIDATION_FAILED', 'One or more fields are missing or malformed.');
-        const result = await service.confirmPayment(request.params.bookingId, value);
+        const result = await useCase.confirmPayment(request.params.bookingId, value);
         response.locals.skipResponseEnvelope = true;
         response.status(200).json({ ...result, serverNow: serverNow() });
       } catch (err) {

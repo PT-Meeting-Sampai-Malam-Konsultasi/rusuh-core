@@ -1,38 +1,38 @@
-const { createHealthService } = require('@/modules/health/health.service');
-const { createHealthController } = require('@/modules/health/health.controller');
-const { createHealthRouter } = require('@/modules/health/health.route');
-const { createEventsController } = require('@/modules/events/events.controller');
-const { createEventsRouter } = require('@/modules/events/events.route');
-const { createAttendeesController } = require('@/modules/attendees/attendees.controller');
-const { createAttendeesRouter } = require('@/modules/attendees/attendees.route');
-const { createBookingsController } = require('@/modules/bookings/bookings.controller');
-const { createBookingsRouter } = require('@/modules/bookings/bookings.route');
-const { createTicketsController } = require('@/modules/tickets/tickets.controller');
-const { createTicketsRouter } = require('@/modules/tickets/tickets.route');
-const { createDefaultDeps } = require('@/infrastructure/deps');
+const { createHealthUseCase } = require('@/application/health/health.use-case');
+const { createHealthController } = require('@/presentation/http/controllers/health.controller');
+const { createHealthRouter } = require('@/presentation/http/routes/health.route');
+const { createEventsController } = require('@/presentation/http/controllers/events.controller');
+const { createEventsRouter } = require('@/presentation/http/routes/events.route');
+const { createAttendeesController } = require('@/presentation/http/controllers/attendees.controller');
+const { createAttendeesRouter } = require('@/presentation/http/routes/attendees.route');
+const { createBookingsController } = require('@/presentation/http/controllers/bookings.controller');
+const { createBookingsRouter } = require('@/presentation/http/routes/bookings.route');
+const { createTicketsController } = require('@/presentation/http/controllers/tickets.controller');
+const { createTicketsRouter } = require('@/presentation/http/routes/tickets.route');
 
 /**
  * Mounts service routers and returns the reusable module dependencies.
- * When `deps` is not provided, the default (in-memory) dependency graph is
- * built from the config, so the app boots with no live infrastructure.
+ * The dependency graph (`deps`) is built by the composition root (app.js /
+ * container.js) and passed in — this file never builds the graph itself
+ * (Onion boundary: presentation/ may not import the container).
  *
  * @param {import('express').Express} app - Express application instance.
  * @param {object} options - Router dependencies and feature flags.
- * @param {object} [options.config] - Validated service configuration.
  * @param {object} [options.platform] - Platform helper implementation.
  * @param {Function} [options.isReady] - Optional readiness predicate.
- * @param {object} [options.deps] - Pre-built dependency graph (createDeps).
+ * @param {object} options.deps - Pre-built dependency graph (required).
  * @returns {object} Mounted service modules.
  */
-function mountRoutes(app, { config, isReady, deps } = {}) {
-  const graph = deps || createDefaultDeps(config);
-  const healthService = createHealthService({ isReady });
-  const healthController = createHealthController(healthService);
+function mountRoutes(app, { isReady, deps } = {}) {
+  if (!deps) throw new Error('mountRoutes requires deps (built by the composition root)');
+  const graph = deps;
+  const healthUseCase = createHealthUseCase({ isReady });
+  const healthController = createHealthController(healthUseCase);
 
-  const eventsController = createEventsController(graph.services.events);
-  const attendeesController = createAttendeesController(graph.services.attendees);
-  const bookingsController = createBookingsController(graph.services.bookings);
-  const ticketsController = createTicketsController(graph.services.tickets);
+  const eventsController = createEventsController(graph.useCases.events);
+  const attendeesController = createAttendeesController(graph.useCases.attendees);
+  const bookingsController = createBookingsController(graph.useCases.bookings);
+  const ticketsController = createTicketsController(graph.useCases.tickets);
 
   app.use(createHealthRouter(healthController));
   app.use(createEventsRouter(eventsController, graph.auth));
@@ -40,7 +40,7 @@ function mountRoutes(app, { config, isReady, deps } = {}) {
   app.use(createBookingsRouter(bookingsController, graph.auth));
   app.use(createTicketsRouter(ticketsController, graph.auth));
 
-  return { healthService, deps: graph };
+  return { healthUseCase, deps: graph };
 }
 
 module.exports = { mountRoutes };

@@ -1,4 +1,4 @@
-const { MemoryStock, LUA_CHECK_AND_HOLD, LUA_RELEASE, LUA_SETTLE } = require('@/infrastructure/stock');
+const { MemoryStock, LUA_CHECK_AND_HOLD, LUA_RELEASE, LUA_SETTLE } = require('@/infrastructure/cache/stock');
 
 describe('MemoryStock (Lua semantics, D8)', () => {
   const eventId = 'evt_2026_gbk';

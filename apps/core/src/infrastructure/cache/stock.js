@@ -15,7 +15,7 @@
 
 /* eslint-disable max-classes-per-file -- Memory + real adapters share one interface per file by design. */
 const Redis = require('ioredis');
-const { seedData } = require('./store');
+const { seedData } = require('../persistence/store');
 
 const MAX_SEATS_PER_NIK = 3;
 

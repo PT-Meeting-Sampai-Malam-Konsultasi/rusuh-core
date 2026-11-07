@@ -1,11 +1,12 @@
-const { MemoryStore } = require('@/infrastructure/store');
-const { MemoryStock } = require('@/infrastructure/stock');
-const { MemoryEventBus } = require('@/infrastructure/events');
-const { createBookingService } = require('@/modules/bookings/bookings.service');
-const { createDefaultDeps } = require('@/infrastructure/deps');
-const { loadEnvironment } = require('@/config/environment');
-const { issueValidationToken } = require('@/modules/attendees/validation-token');
-const { hmacNik } = require('@/lib/nik');
+const { MemoryStore } = require('@/infrastructure/persistence/store');
+const { MemoryStock } = require('@/infrastructure/cache/stock');
+const { MemoryEventBus } = require('@/infrastructure/messaging/events');
+const { createBookingUseCase } = require('@/application/bookings/bookings.use-case');
+const { mayAccessBooking } = require('@/presentation/http/middleware/auth');
+const { createDefaultDeps } = require('@/container');
+const { loadEnvironment } = require('@/infrastructure/config/environment');
+const { issueValidationToken } = require('@/domain/validation-token');
+const { hmacNik } = require('@/domain/nik');
 
 const FEES = { platformFee: 30000, adminFee: 15000, ppnRate: 0.11, tax2Rate: 0, tax2Base: 0 };
 const NIK_KEY = Buffer.from('d'.repeat(32));
@@ -26,11 +27,11 @@ function makeValidationToken() {
   return validationToken;
 }
 
-function buildService() {
+function buildUseCase() {
   const store = new MemoryStore();
   const stock = new MemoryStock();
   const eventBus = new MemoryEventBus();
-  const service = createBookingService({
+  const useCase = createBookingUseCase({
     store,
     stock,
     payment: {
@@ -43,9 +44,10 @@ function buildService() {
     nikHmacKey: 'test-hmac-key',
     nikEncryptionKey: NIK_KEY,
     qrKey: 'test-qr-key',
-    fees: FEES
+    fees: FEES,
+    mayAccessBooking
   });
-  return { store, stock, eventBus, service };
+  return { store, stock, eventBus, useCase };
 }
 
 const ACCOUNT = { sub: 'acc_1' };
@@ -58,10 +60,10 @@ function createBody(validationToken) {
   };
 }
 
-describe('booking service (state transitions)', () => {
+describe('booking use case (state transitions)', () => {
   it('creates a SELECTION booking with the LLD-02 price breakdown', async () => {
-    const { store, service } = buildService();
-    const { booking, created } = await service.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+    const { store, useCase } = buildUseCase();
+    const { booking, created } = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
     expect(created).toBe(true);
     expect(booking.status).toBe('SELECTION');
     expect(booking.price.ticketSubtotal.amount).toBe(3500000);
@@ -72,18 +74,18 @@ describe('booking service (state transitions)', () => {
   });
 
   it('returns the existing booking for the same admission (idempotent)', async () => {
-    const { service } = buildService();
-    const first = await service.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
-    const second = await service.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+    const { useCase } = buildUseCase();
+    const first = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+    const second = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
     expect(second.created).toBe(false);
     expect(second.booking.bookingId).toBe(first.booking.bookingId);
   });
 
   it('refuses a second active booking for the same account + event (Q8)', async () => {
-    const { service } = buildService();
-    await service.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+    const { useCase } = buildUseCase();
+    await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
     await expect(
-      service.createBooking(
+      useCase.createBooking(
         ACCOUNT,
         { token: 'adm_2', slotId: 's_2', maxTickets: 3 },
         createBody(makeValidationToken())
@@ -92,31 +94,31 @@ describe('booking service (state transitions)', () => {
   });
 
   it('rejects more tickets than the admission allows (QUANTITY_OVER_RESERVATION)', async () => {
-    const { service } = buildService();
+    const { useCase } = buildUseCase();
     const token = makeValidationToken();
     const body = {
       eventId: 'evt_2026_gbk',
       tickets: [1, 2, 3].map(() => ({ categoryId: 'cat_vip', validationToken: token }))
     };
     await expect(
-      service.createBooking(ACCOUNT, { token: 'adm_1', slotId: 's_1', maxTickets: 2 }, body)
+      useCase.createBooking(ACCOUNT, { token: 'adm_1', slotId: 's_1', maxTickets: 2 }, body)
     ).rejects.toMatchObject({
       code: 'QUANTITY_OVER_RESERVATION'
     });
   });
 
   it('never resurrects an EXPIRED booking on a late payment (D11)', async () => {
-    const { store, stock, eventBus, service } = buildService();
+    const { store, stock, eventBus, useCase } = buildUseCase();
     await stock.setAdmission(
       'adm_1',
       { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1', max_tickets: 3 },
       60000
     );
-    const { booking } = await service.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
-    await service.enterPayment(booking.bookingId, { account: { sub: 'acc_1' }, admission: { token: 'adm_1' } });
+    const { booking } = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+    await useCase.enterPayment(booking.bookingId, { account: { sub: 'acc_1' }, admission: { token: 'adm_1' } });
     const held = await store.getBooking(booking.bookingId);
-    await service.expireBooking(held, 'expired');
-    const result = await service.confirmPayment(booking.bookingId, {
+    await useCase.expireBooking(held, 'expired');
+    const result = await useCase.confirmPayment(booking.bookingId, {
       orderId: `${booking.bookingId}-1`,
       transactionId: 'txn_late',
       transactionStatus: 'settlement',
@@ -134,10 +136,10 @@ describe('booking service (state transitions)', () => {
   it('createDefaultDeps builds a working graph in test mode', () => {
     const config = loadEnvironment({ NODE_ENV: 'test' });
     const deps = createDefaultDeps(config);
-    expect(deps.services.bookings).toBeDefined();
-    expect(deps.services.events).toBeDefined();
-    expect(deps.services.attendees).toBeDefined();
-    expect(deps.services.tickets).toBeDefined();
+    expect(deps.useCases.bookings).toBeDefined();
+    expect(deps.useCases.events).toBeDefined();
+    expect(deps.useCases.attendees).toBeDefined();
+    expect(deps.useCases.tickets).toBeDefined();
     expect(deps.auth.requireAccount).toBeDefined();
     expect(deps.sweeper).toBeDefined();
     expect(deps.admissionConsumer).toBeDefined();

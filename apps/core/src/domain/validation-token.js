@@ -1,4 +1,4 @@
-const { encryptText, decryptText } = require('@/lib/nik');
+const { encryptText, decryptText } = require('@/domain/nik');
 
 /**
  * Validation token (LLD-02 §5.1): a short-lived, stateless token that carries

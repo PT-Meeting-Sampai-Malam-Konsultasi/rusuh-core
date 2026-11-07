@@ -1,5 +1,5 @@
 const request = require('supertest');
-const { hmacNik } = require('@/lib/nik');
+const { hmacNik } = require('@/domain/nik');
 const { createTestApp } = require('@/test-app');
 
 describe('POST /v1/events/:eventId/attendees/validate', () => {

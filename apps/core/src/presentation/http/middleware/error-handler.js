@@ -1,17 +1,20 @@
 const Boom = require('@hapi/boom');
-const defaultPlatform = require('@/platform/common');
-const { problemBody } = require('@/lib/problem');
+const { problemBody } = require('@/domain/problem');
 
 /**
  * Terminal Express error handler. Renders RFC 9457 Problem JSON (repo
  * contract, api/openapi.yaml) with a stable machine `code` and a `traceId`
  * (the request correlation id when present).
+ * The platform helper is INJECTED by the composition root (app.js); this file
+ * never imports platform/ itself (Onion boundary: presentation/ may not
+ * import platform/).
  *
  * @param {object} options - Error-handler dependencies.
- * @param {object} [options.platform] - Platform logging implementation.
+ * @param {object} options.platform - Platform logging implementation (required).
  * @returns {Function} Express error middleware.
  */
-function createErrorHandler({ platform = defaultPlatform } = {}) {
+function createErrorHandler({ platform } = {}) {
+  if (!platform) throw new Error('createErrorHandler requires platform (injected by app.js)');
   // eslint-disable-next-line no-unused-vars -- Express requires the 4th error-middleware argument.
   return (error, request, response, _next) => {
     if (response.headersSent) return;

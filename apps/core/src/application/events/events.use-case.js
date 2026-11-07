@@ -1,17 +1,17 @@
-const { problemError } = require('@/lib/problem');
-const { presentEvent, presentCategory, serverNow } = require('@/lib/presenters');
+const { problemError } = require('@/domain/problem');
+const { presentEvent, presentCategory, serverNow } = require('@/domain/presenters');
 
 /**
  * Event catalogue (core.booking): public list/detail + the Detail page
  * categories (prices + live stock, admission-gated).
  *
  * @param {object} deps
- * @param {object} deps.store - Durable store (events, categories).
- * @param {object} deps.stock - Live stock adapter (available counts).
+ * @param {object} deps.store - StorePort (durable store: events, categories).
+ * @param {object} deps.stock - StockPort (live stock: available counts).
  * @param {object} deps.fees - Fee config ({ adminFee }).
- * @returns {object} Events service.
+ * @returns {object} Events use case.
  */
-function createEventsService({ store, stock, fees }) {
+function createEventsUseCase({ store, stock, fees }) {
   return {
     async listEvents({ state } = {}) {
       const events = await store.listEvents();
@@ -71,4 +71,4 @@ function createEventsService({ store, stock, fees }) {
   };
 }
 
-module.exports = { createEventsService };
+module.exports = { createEventsUseCase };

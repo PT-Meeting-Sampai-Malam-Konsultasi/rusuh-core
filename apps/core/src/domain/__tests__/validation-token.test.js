@@ -1,4 +1,4 @@
-const { issueValidationToken, verifyValidationToken } = require('@/modules/attendees/validation-token');
+const { issueValidationToken, verifyValidationToken } = require('@/domain/validation-token');
 
 describe('validationToken', () => {
   const key = Buffer.from('b'.repeat(32));

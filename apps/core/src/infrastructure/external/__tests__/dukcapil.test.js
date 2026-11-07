@@ -1,4 +1,4 @@
-const { DukcapilClient } = require('@/infrastructure/dukcapil');
+const { DukcapilClient } = require('@/infrastructure/external/dukcapil');
 
 describe('DukcapilClient', () => {
   it('returns the verdict from the mock (NIK-only)', async () => {

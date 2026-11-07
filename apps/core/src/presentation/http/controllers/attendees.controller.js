@@ -1,13 +1,13 @@
-const { problemError } = require('@/lib/problem');
-const { validateAttendeeBody, eventIdParam } = require('./attendees.validation');
+const { problemError } = require('@/domain/problem');
+const { validateAttendeeBody, eventIdParam } = require('../validation/attendees.validation');
 
 /**
  * Creates controllers for the attendee validation endpoint.
  *
- * @param {object} service - Attendees service.
+ * @param {object} useCase - Attendees use case.
  * @returns {object} Attendee endpoint controllers.
  */
-function createAttendeesController(service) {
+function createAttendeesController(useCase) {
   return {
     validateAttendee: async (request, response, next) => {
       try {
@@ -15,7 +15,7 @@ function createAttendeesController(service) {
         if (paramError) throw problemError('VALIDATION_FAILED', 'One or more fields are missing or malformed.');
         const { error, value } = validateAttendeeBody.validate(request.body);
         if (error) throw problemError('VALIDATION_FAILED', 'One or more fields are missing or malformed.');
-        const result = await service.validateAttendee(request.params.eventId, request.admission, value);
+        const result = await useCase.validateAttendee(request.params.eventId, request.admission, value);
         response.locals.skipResponseEnvelope = true;
         response.status(200).json({
           validationToken: result.validationToken,

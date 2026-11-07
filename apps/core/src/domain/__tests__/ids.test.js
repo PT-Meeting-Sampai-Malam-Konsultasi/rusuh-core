@@ -1,4 +1,4 @@
-const { generateBookingId, generateTicketId, generateOrderCode, ticketCode, qrPayload } = require('@/lib/ids');
+const { generateBookingId, generateTicketId, generateOrderCode, ticketCode, qrPayload } = require('@/domain/ids');
 
 describe('ids', () => {
   it('generates unique time-ordered booking ids', () => {

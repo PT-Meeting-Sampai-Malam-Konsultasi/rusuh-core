@@ -145,7 +145,7 @@ describe('bookings journey (D5)', () => {
     await app.locals.deps.store.updateBooking(bookingId, {
       paymentExpiresAt: new Date(Date.now() - 1000).toISOString()
     });
-    const result = await deps.services.bookings.expireDue();
+    const result = await deps.useCases.bookings.expireDue();
     expect(result.processed).toBe(1);
     expect((await deps.store.getBooking(bookingId)).status).toBe('EXPIRED');
     // The hold was released back to available.

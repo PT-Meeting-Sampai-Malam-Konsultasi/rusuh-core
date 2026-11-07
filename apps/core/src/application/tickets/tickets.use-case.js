@@ -1,14 +1,14 @@
-const { problemError } = require('@/lib/problem');
+const { problemError } = require('@/domain/problem');
 
 /**
  * Tickets (D19): paid tickets only. The public ticket code is minted at
  * payment success; /tickets never returns unpaid bookings.
  *
  * @param {object} deps
- * @param {object} deps.store - Durable store (tickets, bookings).
- * @returns {object} Tickets service.
+ * @param {object} deps.store - StorePort (durable store: tickets, bookings).
+ * @returns {object} Tickets use case.
  */
-function createTicketsService({ store }) {
+function createTicketsUseCase({ store }) {
   return {
     async listMyTickets(accountId) {
       return store.listTicketsByAccount(accountId);
@@ -26,4 +26,4 @@ function createTicketsService({ store }) {
   };
 }
 
-module.exports = { createTicketsService };
+module.exports = { createTicketsUseCase };

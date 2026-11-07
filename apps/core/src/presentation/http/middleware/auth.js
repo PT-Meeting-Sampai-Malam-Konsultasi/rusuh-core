@@ -1,5 +1,5 @@
 const { verifyAccountToken } = require('@rusuh/auth');
-const { problemError } = require('@/lib/problem');
+const { problemError } = require('@/domain/problem');
 
 /**
  * Account authentication (Q43): verifies the Bearer account JWT locally

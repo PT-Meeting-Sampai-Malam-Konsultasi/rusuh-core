@@ -1,4 +1,4 @@
-const { maskNik, hmacNik, isValidNikFormat, encryptNik, decryptNik, normalizeNik } = require('@/lib/nik');
+const { maskNik, hmacNik, isValidNikFormat, encryptNik, decryptNik, normalizeNik } = require('@/domain/nik');
 
 describe('nik', () => {
   const key = Buffer.from('a'.repeat(32));

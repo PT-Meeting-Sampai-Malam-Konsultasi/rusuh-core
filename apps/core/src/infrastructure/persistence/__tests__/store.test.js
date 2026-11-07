@@ -1,4 +1,4 @@
-const { MemoryStore } = require('@/infrastructure/store');
+const { MemoryStore } = require('@/infrastructure/persistence/store');
 
 describe('MemoryStore', () => {
   let store;

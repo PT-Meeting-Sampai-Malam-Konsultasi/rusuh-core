@@ -1,4 +1,4 @@
-const { problemBody, problemError } = require('@/lib/problem');
+const { problemBody, problemError } = require('@/domain/problem');
 
 describe('problem (RFC 9457)', () => {
   it('renders the Problem body for a known code', () => {

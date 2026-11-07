@@ -1,31 +1,36 @@
-const { problemError } = require('@/lib/problem');
-const { computePrice } = require('@/lib/fees');
-const { generateBookingId, generateTicketId, generateOrderCode, ticketCode, qrPayload } = require('@/lib/ids');
-const { encryptNik } = require('@/lib/nik');
-const { mayAccessBooking } = require('@/middleware/auth');
-const { verifyValidationToken } = require('@/modules/attendees/validation-token');
-const { serverNow } = require('@/lib/presenters');
+const { problemError } = require('@/domain/problem');
+const { computePrice } = require('@/domain/fees');
+const { generateBookingId, generateTicketId, generateOrderCode, ticketCode, qrPayload } = require('@/domain/ids');
+const { encryptNik } = require('@/domain/nik');
+const { verifyValidationToken } = require('@/domain/validation-token');
+const { serverNow } = require('@/domain/presenters');
 const { MAX_SEATS_PER_NIK, MAX_TICKETS_PER_ORDER } = require('@rusuh/contracts').constants;
 
 const SELECTION_TTL_MS = 5 * 60 * 1000;
 const PAYMENT_TTL_MS = 10 * 60 * 1000;
 
 /**
- * Booking service (LLD-02 §5–§7, §10–§11).
+ * Booking use case (LLD-02 §5–§7, §10–§11).
  * States: SELECTION (5 min, no hold) -> PAYMENT_PENDING (10 min, hold)
  *   -> PAID / EXPIRED. A late successful callback NEVER resurrects (D11).
  *
  * @param {object} deps
- * @param {object} deps.store - Durable store (bookings, tickets, nik backstop).
- * @param {object} deps.stock - Live stock adapter (Lua hold/release/settle, admission).
- * @param {object} deps.payment - Payment-module internal client.
- * @param {object} deps.eventBus - Event bus (empty-slot, email jobs).
+ * @param {object} deps.store - StorePort (durable store: bookings, tickets, nik backstop).
+ * @param {object} deps.stock - StockPort (live stock adapter: Lua hold/release/settle, admission).
+ * @param {object} deps.payment - PaymentPort (payment-module internal client).
+ * @param {object} deps.eventBus - EventBusPort (empty-slot, email jobs).
  * @param {Buffer} deps.nikEncryptionKey - 32-byte key for NIK ciphertext + tokens.
  * @param {string} deps.qrKey - HMAC key for the QR payload signature.
  * @param {object} deps.fees - Fee config ({ platformFee, adminFee, ppnRate, tax2Rate, tax2Base, tax2Label }).
- * @returns {object} Booking service.
+ * @param {Function} deps.mayAccessBooking - Booking-access guard, injected by
+ *   the container from the presentation layer (auth middleware):
+ *   (booking, caller) => boolean. The use case never imports presentation/.
+ * @returns {object} Booking use case.
  */
-function createBookingService({ store, stock, payment, eventBus, nikEncryptionKey, qrKey, fees }) {
+function createBookingUseCase({ store, stock, payment, eventBus, nikEncryptionKey, qrKey, fees, mayAccessBooking }) {
+  if (typeof mayAccessBooking !== 'function') {
+    throw new Error('createBookingUseCase requires mayAccessBooking (injected by the container)');
+  }
   function luaItems(booking) {
     // Group tickets by category; collect the NIK HMACs per category.
     const byCategory = new Map();
@@ -477,4 +482,4 @@ function createBookingService({ store, stock, payment, eventBus, nikEncryptionKe
   };
 }
 
-module.exports = { createBookingService, SELECTION_TTL_MS, PAYMENT_TTL_MS };
+module.exports = { createBookingUseCase, SELECTION_TTL_MS, PAYMENT_TTL_MS };

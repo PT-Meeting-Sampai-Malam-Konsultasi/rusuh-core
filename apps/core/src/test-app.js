@@ -1,15 +1,15 @@
-const { loadEnvironment } = require('./config/environment');
+const { loadEnvironment } = require('./infrastructure/config/environment');
 const { createApp } = require('./app');
-const { createDefaultDeps } = require('./infrastructure/deps');
-const { MemoryStore } = require('./infrastructure/store');
-const { MemoryStock } = require('./infrastructure/stock');
-const { MemoryEventBus } = require('./infrastructure/events');
+const { createDefaultDeps } = require('./container');
+const { MemoryStore } = require('./infrastructure/persistence/store');
+const { MemoryStock } = require('./infrastructure/cache/stock');
+const { MemoryEventBus } = require('./infrastructure/messaging/events');
 const {
   createRequireAccount,
   createRequireAdmission,
   createRequireAccountOrAdmission,
   createRequireServiceKey
-} = require('./middleware/auth');
+} = require('./presentation/http/middleware/auth');
 
 /**
  * Builds a test app with stub adapters (no live DB, Valkey, SQS, or AWS).

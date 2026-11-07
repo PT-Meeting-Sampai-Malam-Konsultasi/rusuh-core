@@ -1,4 +1,4 @@
-const { computePrice } = require('@/lib/fees');
+const { computePrice } = require('@/domain/fees');
 
 describe('fees (LLD-02 §8)', () => {
   const fees = { platformFee: 30000, adminFee: 15000, ppnRate: 0.11, tax2Rate: 0, tax2Base: 0 };

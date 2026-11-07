@@ -1,22 +1,23 @@
 const crypto = require('crypto');
 const { SQSClient } = require('@aws-sdk/client-sqs');
-const { resolveEncryptionKey } = require('@/lib/nik');
-const { createEventsService } = require('@/modules/events/events.service');
-const { createAttendeesService } = require('@/modules/attendees/attendees.service');
-const { createBookingService } = require('@/modules/bookings/bookings.service');
-const { createTicketsService } = require('@/modules/tickets/tickets.service');
+const { resolveEncryptionKey } = require('@/domain/nik');
+const { createEventsUseCase } = require('@/application/events/events.use-case');
+const { createAttendeesUseCase } = require('@/application/attendees/attendees.use-case');
+const { createBookingUseCase } = require('@/application/bookings/bookings.use-case');
+const { createTicketsUseCase } = require('@/application/tickets/tickets.use-case');
 const {
   createRequireAccount,
   createRequireAdmission,
   createRequireAccountOrAdmission,
-  createRequireServiceKey
-} = require('@/middleware/auth');
-const { MemoryStore, PgStore } = require('./store');
-const { MemoryStock, RedisStock } = require('./stock');
-const { DukcapilClient } = require('./dukcapil');
-const { PaymentClient } = require('./payment');
-const { MemoryEventBus, SqsEventBus, AdmissionConsumer } = require('./events');
-const { Sweeper } = require('./sweeper');
+  createRequireServiceKey,
+  mayAccessBooking
+} = require('@/presentation/http/middleware/auth');
+const { MemoryStore, PgStore } = require('./infrastructure/persistence/store');
+const { MemoryStock, RedisStock } = require('./infrastructure/cache/stock');
+const { DukcapilClient } = require('./infrastructure/external/dukcapil');
+const { PaymentClient } = require('./infrastructure/external/payment');
+const { MemoryEventBus, SqsEventBus, AdmissionConsumer } = require('./infrastructure/messaging/events');
+const { Sweeper } = require('./infrastructure/sweeper');
 
 /**
  * Builds the core-module dependency graph.
@@ -41,22 +42,35 @@ function buildAuth({ publicKeys, isDenied, stock, serviceKey }) {
   };
 }
 
-/** Builds the business services for a dependency graph. */
-function buildServices({ store, stock, dukcapil, payment, eventBus, nikHmacKey, nikEncryptionKey, qrKey, fees }) {
+/** Builds the business use cases for a dependency graph. */
+function buildUseCases({
+  store,
+  stock,
+  dukcapil,
+  payment,
+  eventBus,
+  nikHmacKey,
+  nikEncryptionKey,
+  qrKey,
+  fees,
+  // Renamed locally: the module also imports mayAccessBooking (the guard
+  // itself) for the default graph below; the parameter is the same function.
+  mayAccessBooking: accessGuard
+}) {
   return {
-    events: createEventsService({ store, stock, fees }),
-    attendees: createAttendeesService({ store, stock, dukcapil, nikHmacKey, nikEncryptionKey }),
-    bookings: createBookingService({
+    events: createEventsUseCase({ store, stock, fees }),
+    attendees: createAttendeesUseCase({ store, stock, dukcapil, nikHmacKey, nikEncryptionKey }),
+    bookings: createBookingUseCase({
       store,
       stock,
       payment,
       eventBus,
-      nikHmacKey,
       nikEncryptionKey,
       qrKey,
-      fees
+      fees,
+      mayAccessBooking: accessGuard
     }),
-    tickets: createTicketsService({ store })
+    tickets: createTicketsUseCase({ store })
   };
 }
 
@@ -117,7 +131,7 @@ function createDefaultDeps(config, overrides = {}) {
     }
   }
   const isDenied = (jti) => stock.isDenied(jti);
-  const services = buildServices({
+  const useCases = buildUseCases({
     store,
     stock,
     dukcapil,
@@ -126,11 +140,12 @@ function createDefaultDeps(config, overrides = {}) {
     nikHmacKey: config.nikHmacKey,
     nikEncryptionKey,
     qrKey: config.qrHmacKey,
-    fees: config.fees
+    fees: config.fees,
+    mayAccessBooking
   });
   const { auth: providedAuth } = overrides;
   const auth = providedAuth || buildAuth({ publicKeys, isDenied, stock, serviceKey: config.serviceKey });
-  const workers = buildWorkers({ stock, bookingService: services.bookings, config });
+  const workers = buildWorkers({ stock, bookingService: useCases.bookings, config });
   return {
     config,
     store,
@@ -142,7 +157,11 @@ function createDefaultDeps(config, overrides = {}) {
     devPrivateJwk,
     isDenied,
     nikEncryptionKey,
-    services,
+    // Booking-access guard (presentation layer, injected into the bookings
+    // use case). Kept on the graph so createDeps rebuilds (which spread
+    // ...deps into buildUseCases) keep it.
+    mayAccessBooking,
+    useCases,
     auth,
     ...workers
   };
@@ -161,19 +180,19 @@ async function createDeps(config, overrides = {}) {
   const deps = createDefaultDeps(config, overrides);
   if (config.databaseUrl && !overrides.store) {
     deps.store = await PgStore.connect(config.databaseUrl);
-    deps.services = buildServices({ ...deps, store: deps.store });
-    deps.sweeper = buildWorkers({ stock: deps.stock, bookingService: deps.services.bookings, config }).sweeper;
+    deps.useCases = buildUseCases({ ...deps, store: deps.store });
+    deps.sweeper = buildWorkers({ stock: deps.stock, bookingService: deps.useCases.bookings, config }).sweeper;
   }
   if (config.valkeyUrl && !overrides.stock) {
     deps.stock = await RedisStock.connect(config.valkeyUrl);
-    deps.services = buildServices({ ...deps, stock: deps.stock });
+    deps.useCases = buildUseCases({ ...deps, stock: deps.stock });
     deps.auth = buildAuth({
       publicKeys: deps.publicKeys,
       isDenied: (jti) => deps.stock.isDenied(jti),
       stock: deps.stock,
       serviceKey: config.serviceKey
     });
-    deps.sweeper = buildWorkers({ stock: deps.stock, bookingService: deps.services.bookings, config }).sweeper;
+    deps.sweeper = buildWorkers({ stock: deps.stock, bookingService: deps.useCases.bookings, config }).sweeper;
     deps.admissionConsumer = new AdmissionConsumer({
       stock: deps.stock,
       client: deps.admissionConsumer.client,
@@ -188,8 +207,8 @@ async function createDeps(config, overrides = {}) {
       emptySlotQueueUrl: config.sqsEmptySlotQueueUrl,
       notificationQueueUrl: config.sqsNotificationQueueUrl
     });
-    deps.services = buildServices({ ...deps, eventBus: deps.eventBus });
-    deps.sweeper = buildWorkers({ stock: deps.stock, bookingService: deps.services.bookings, config }).sweeper;
+    deps.useCases = buildUseCases({ ...deps, eventBus: deps.eventBus });
+    deps.sweeper = buildWorkers({ stock: deps.stock, bookingService: deps.useCases.bookings, config }).sweeper;
     if (config.sqsAdmissionQueueUrl) {
       deps.admissionConsumer = new AdmissionConsumer({
         stock: deps.stock,

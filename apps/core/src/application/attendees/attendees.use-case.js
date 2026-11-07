@@ -1,6 +1,6 @@
-const { problemError } = require('@/lib/problem');
-const { normalizeNik, isValidNikFormat, maskNik, hmacNik, encryptNik } = require('@/lib/nik');
-const { issueValidationToken } = require('./validation-token');
+const { problemError } = require('@/domain/problem');
+const { normalizeNik, isValidNikFormat, maskNik, hmacNik, encryptNik } = require('@/domain/nik');
+const { issueValidationToken } = require('@/domain/validation-token');
 
 const MAX_ATTEMPTS_PER_MINUTE = 3;
 const ATTEMPT_WINDOW_MS = 60 * 1000;
@@ -15,14 +15,14 @@ const MAX_SEATS_PER_NIK = 3;
  * Success returns a short-lived validationToken (+ nikMasked) for the hold.
  *
  * @param {object} deps
- * @param {object} deps.store - Durable store (event lookup, nik backstop).
- * @param {object} deps.stock - Live stock adapter (NIK counters, validated set).
- * @param {object} deps.dukcapil - Dukcapil client (verify).
+ * @param {object} deps.store - StorePort (durable store: event lookup, nik backstop).
+ * @param {object} deps.stock - StockPort (live stock: NIK counters, validated set).
+ * @param {object} deps.dukcapil - DukcapilPort (verify).
  * @param {string} deps.nikHmacKey - HMAC key for the NIK blind index.
  * @param {Buffer} deps.nikEncryptionKey - 32-byte key for NIK ciphertext + tokens.
- * @returns {object} Attendees service.
+ * @returns {object} Attendees use case.
  */
-function createAttendeesService({ store, stock, dukcapil, nikHmacKey, nikEncryptionKey }) {
+function createAttendeesUseCase({ store, stock, dukcapil, nikHmacKey, nikEncryptionKey }) {
   // Rate limit: 3 attempts/min per field per order (C-6). In-memory for v1;
   // a multi-replica deployment should move this to Valkey.
   const attempts = new Map(); // `${admissionToken}:${fieldIndex}` -> [timestamps]
@@ -82,4 +82,4 @@ function createAttendeesService({ store, stock, dukcapil, nikHmacKey, nikEncrypt
   };
 }
 
-module.exports = { createAttendeesService };
+module.exports = { createAttendeesUseCase };
