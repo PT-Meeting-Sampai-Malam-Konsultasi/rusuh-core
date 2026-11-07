@@ -3,6 +3,10 @@
     "@": "src"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1162.0",
+    "@aws-sdk/client-ses": "^3.1162.0",
+    "@aws-sdk/client-sqs": "^3.1162.0",
+    "@aws-sdk/s3-request-presigner": "^3.1162.0",
     "@hapi/boom": "^10.0.1",
     "@rusuh/auth": "0.1.0",
     "@rusuh/contracts": "0.1.0",
@@ -11,7 +15,8 @@
     "express": "^4.21.2",
     "joi": "^17.13.3",
     "lru-cache": "^10.4.3",
-    "module-alias": "^2.2.3"
+    "module-alias": "^2.2.3",
+    "pg": "^8.23.1"
   },
   "description": "Notification service: SQS consumer, SES email (OTP, e-ticket, expired).",
   "devDependencies": {
