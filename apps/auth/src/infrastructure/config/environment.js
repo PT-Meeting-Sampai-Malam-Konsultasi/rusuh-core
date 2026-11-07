@@ -15,8 +15,34 @@ const environmentSchema = Joi.object({
   AUTH_JWT_PRIVATE_KEY_JWK: Joi.string().optional(),
   AUTH_JWT_KID: Joi.string().optional(),
   AUTH_JWT_PUBLIC_KEYS_JWKS: Joi.string().optional(),
-  OTP_SECRET: Joi.string().optional()
+  OTP_SECRET: Joi.string().optional(),
+  // Comma-separated CORS origins. When unset/empty, the production
+  // domains + local dev origins are used (see DEFAULT_CORS_ORIGINS).
+  CORS_ORIGINS: Joi.string().optional()
 }).unknown(true);
+
+/** Default CORS origins (production domains + local dev). */
+const DEFAULT_CORS_ORIGINS = [
+  'https://rusuh-tiket.web.id',
+  'https://www.rusuh-tiket.web.id',
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
+
+/**
+ * Parses a comma-separated CORS origins string into an array.
+ *
+ * @param {string} [value] - Comma-separated origins.
+ * @returns {string[]} Origins (the default list when unset/empty).
+ */
+function parseCorsOrigins(value) {
+  if (!value) return [...DEFAULT_CORS_ORIGINS];
+  const parsed = value
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+  return parsed.length > 0 ? parsed : [...DEFAULT_CORS_ORIGINS];
+}
 
 /**
  * Validates process environment and returns the service runtime configuration.
@@ -49,7 +75,8 @@ function loadEnvironment(environment = process.env) {
     jwtPrivateKeyJwk: value.AUTH_JWT_PRIVATE_KEY_JWK,
     jwtKid: value.AUTH_JWT_KID,
     jwtPublicKeysJwks: value.AUTH_JWT_PUBLIC_KEYS_JWKS,
-    otpSecret: value.OTP_SECRET
+    otpSecret: value.OTP_SECRET,
+    corsOrigins: parseCorsOrigins(value.CORS_ORIGINS)
   };
 }
 

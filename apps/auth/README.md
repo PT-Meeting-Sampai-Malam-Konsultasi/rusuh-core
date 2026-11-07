@@ -48,6 +48,10 @@ Errors are RFC 9457 Problem JSON (`{type, title, status, code, detail, ...}`):
   remaining token life (Q42). Valkey down → fail-closed 503.
 - OTP email is enqueued to SQS for notification-module (Q34); auth never
   calls SES directly.
+- Security headers + CORS: `helmet()` (defaults) and `cors()` are mounted in
+  `createApp` before any route. CORS origins come from `CORS_ORIGINS`
+  (comma-separated env var); default is
+  `https://rusuh-tiket.web.id,https://www.rusuh-tiket.web.id,http://localhost:3000,http://localhost:5173`.
 
 ## Notes for the openapi.yaml sync (no breaking changes made here)
 
