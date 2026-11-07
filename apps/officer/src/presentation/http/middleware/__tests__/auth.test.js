@@ -1,4 +1,4 @@
-const { apiError } = require('@/errors');
+const { apiError } = require('@/domain/errors');
 const { createRequireRole } = require('../auth');
 
 describe('createRequireRole', () => {

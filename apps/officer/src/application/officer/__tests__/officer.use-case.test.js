@@ -1,10 +1,10 @@
-const { createOfficerService } = require('../officer.service');
-const { TEST_NIK, makeTicket, makeEvent, makeOfficerDeps, todayJakarta } = require('../test-fixtures');
+const { createOfficerUseCase } = require('../officer.use-case');
+const { TEST_NIK, makeTicket, makeEvent, makeOfficerDeps, todayJakarta } = require('./test-fixtures');
 
 describe('officer service', () => {
   it('lookup returns the masked ticket (never the full NIK)', async () => {
     const deps = makeOfficerDeps();
-    const service = createOfficerService(deps);
+    const service = createOfficerUseCase(deps);
     const ticket = await service.lookupTicket('SMD-FB-04827');
     expect(ticket.ticketCode).toBe('SMD-FB-04827');
     expect(ticket.nikMasked).toBe('3171 •••• •••• 0001');
@@ -15,14 +15,14 @@ describe('officer service', () => {
 
   it('lookup accepts the internal ticket id too', async () => {
     const deps = makeOfficerDeps();
-    const service = createOfficerService(deps);
+    const service = createOfficerUseCase(deps);
     const ticket = await service.lookupTicket('tk_01JB2YBA1');
     expect(ticket.ticketCode).toBe('SMD-FB-04827');
   });
 
   it('lookup of an unknown code throws 404 TIKET_TIDAK_DITEMUKAN', async () => {
     const deps = makeOfficerDeps();
-    const service = createOfficerService(deps);
+    const service = createOfficerUseCase(deps);
     await expect(service.lookupTicket('SMD-XX-00000')).rejects.toMatchObject({
       data: { code: 'TIKET_TIDAK_DITEMUKAN' }
     });
@@ -30,7 +30,7 @@ describe('officer service', () => {
 
   it('scan reveals the full NIK and marks the ticket used', async () => {
     const deps = makeOfficerDeps();
-    const service = createOfficerService(deps);
+    const service = createOfficerUseCase(deps);
     const scanned = await service.scanTicket('SMD-FB-04827', { officerId: 'acc_officer_1' });
     expect(scanned.nikFull).toBe(TEST_NIK);
     expect(scanned.status).toBe('used');
@@ -48,7 +48,7 @@ describe('officer service', () => {
 
   it('a repeat scan is idempotent (same result, not an error) and still audited', async () => {
     const deps = makeOfficerDeps();
-    const service = createOfficerService(deps);
+    const service = createOfficerUseCase(deps);
     const first = await service.scanTicket('SMD-FB-04827', { officerId: 'acc_officer_1' });
     const second = await service.scanTicket('SMD-FB-04827', { officerId: 'acc_officer_1' });
     expect(second.status).toBe('used');
@@ -64,7 +64,7 @@ describe('officer service', () => {
 
   it('scan of an unknown code throws 404 and writes no audit', async () => {
     const deps = makeOfficerDeps();
-    const service = createOfficerService(deps);
+    const service = createOfficerUseCase(deps);
     await expect(service.scanTicket('SMD-XX-00000', { officerId: 'acc_officer_1' })).rejects.toMatchObject({
       data: { code: 'TIKET_TIDAK_DITEMUKAN' }
     });
@@ -79,7 +79,7 @@ describe('officer service', () => {
       tickets: [makeTicket({ eventDate: yesterday })],
       events: [makeEvent({ date: yesterday })]
     });
-    const service = createOfficerService(deps);
+    const service = createOfficerUseCase(deps);
     await expect(service.scanTicket('SMD-FB-04827', { officerId: 'acc_officer_1' })).rejects.toMatchObject({
       data: { code: 'TIKET_TIDAK_BERLAKU' }
     });
@@ -91,7 +91,7 @@ describe('officer service', () => {
 
   it('scan warns on a gate mismatch but still marks the ticket used', async () => {
     const deps = makeOfficerDeps();
-    const service = createOfficerService(deps);
+    const service = createOfficerUseCase(deps);
     const scanned = await service.scanTicket('SMD-FB-04827', { officerId: 'acc_officer_1', gate: 'Gerbang 2' });
     expect(scanned.status).toBe('used');
     expect(scanned.gateWarning).toEqual({ expectedGate: 'Gerbang 5', scannedAtGate: 'Gerbang 2' });
@@ -99,7 +99,7 @@ describe('officer service', () => {
 
   it('scan with a broken NIK cipher throws 503 (no decrypt bypass)', async () => {
     const deps = makeOfficerDeps({ tickets: [makeTicket({ nikCipher: 'not-a-cipher' })] });
-    const service = createOfficerService(deps);
+    const service = createOfficerUseCase(deps);
     await expect(service.scanTicket('SMD-FB-04827', { officerId: 'acc_officer_1' })).rejects.toMatchObject({
       data: { code: 'SERVICE_UNAVAILABLE' }
     });
@@ -116,7 +116,7 @@ describe('officer service', () => {
       })
     ];
     const deps = makeOfficerDeps({ tickets });
-    const service = createOfficerService(deps);
+    const service = createOfficerUseCase(deps);
     const page1 = await service.listAttendees('evt_2026_gbk', { page: 1, limit: 1 });
     expect(page1.meta).toEqual({ total: 2, page: 1, limit: 1 });
     expect(page1.data).toHaveLength(1);
@@ -129,7 +129,7 @@ describe('officer service', () => {
 
   it('listAttendees of an unknown event throws 404 NOT_FOUND', async () => {
     const deps = makeOfficerDeps();
-    const service = createOfficerService(deps);
+    const service = createOfficerUseCase(deps);
     await expect(service.listAttendees('evt_nope', { page: 1, limit: 50 })).rejects.toMatchObject({
       data: { code: 'NOT_FOUND' }
     });

@@ -1,6 +1,12 @@
 const crypto = require('crypto');
 
 /**
+ * @typedef {object} NikCrypto
+ * @property {Function} decrypt - (ciphertext: string) => full NIK string. Throws on a malformed ciphertext or a failed auth tag.
+ * @property {Function} encrypt - (plaintext: string) => ciphertext string (base64(iv):base64(data):base64(tag)).
+ */
+
+/**
  * NIK cryptography (D24). The ticket's NIK is stored in three forms: masked,
  * HMAC blind index, and ciphertext (AES-256-GCM). This module decrypts the
  * ciphertext for the officer reveal.

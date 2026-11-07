@@ -1,4 +1,10 @@
-const { apiError } = require('@/errors');
+const { apiError } = require('@/domain/errors');
+
+/**
+ * @typedef {import('@/domain/ports/ticket-store.port').TicketStore} TicketStore
+ * @typedef {import('@/domain/ports/audit-store.port').AuditStore} AuditStore
+ * @typedef {import('@/domain/nik').NikCrypto} NikCrypto
+ */
 
 /**
  * Today's date (YYYY-MM-DD) in Asia/Jakarta — event dates are Jakarta dates.
@@ -38,22 +44,25 @@ function toTicketView(ticket) {
 }
 
 /**
- * Creates the officer service (gate flow, LLD-05 §4).
+ * Creates the officer use case (gate flow, LLD-05 §4).
  *
  * Flow (task brief): lookup shows the masked NIK; a successful scan reveals
  * the full NIK AND marks the ticket used (one step). This differs from the
  * LLD-05 two-step flow (reveal via POST /officer/scans, then mark-used) —
  * see README; the LLD's separate reveal endpoint is not implemented here.
  *
+ * The adapters are injected (ports in domain/ports/); this file never
+ * requires infrastructure.
+ *
  * @param {object} deps
- * @param {object} deps.ticketStore - TicketStore (Postgres or in-memory).
- * @param {object} deps.auditStore - AuditStore (Postgres or in-memory).
- * @param {object} deps.nikCrypto - { decrypt } (AES-256-GCM, D24).
+ * @param {TicketStore} deps.ticketStore - TicketStore (Postgres or in-memory).
+ * @param {AuditStore} deps.auditStore - AuditStore (Postgres or in-memory).
+ * @param {NikCrypto} deps.nikCrypto - { decrypt } (AES-256-GCM, D24).
  * @returns {object} { lookupTicket, scanTicket, listAttendees }
  */
-function createOfficerService({ ticketStore, auditStore, nikCrypto }) {
+function createOfficerUseCase({ ticketStore, auditStore, nikCrypto }) {
   if (!ticketStore || !auditStore || !nikCrypto) {
-    throw new Error('createOfficerService requires ticketStore, auditStore and nikCrypto');
+    throw new Error('createOfficerUseCase requires ticketStore, auditStore and nikCrypto');
   }
 
   const auditBase = (officerId, ticket) => ({
@@ -159,4 +168,4 @@ function createOfficerService({ ticketStore, auditStore, nikCrypto }) {
   };
 }
 
-module.exports = { createOfficerService, toTicketView, todayInJakarta };
+module.exports = { createOfficerUseCase, toTicketView, todayInJakarta };

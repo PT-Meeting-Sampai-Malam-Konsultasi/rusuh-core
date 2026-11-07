@@ -1,18 +1,20 @@
 const Boom = require('@hapi/boom');
-const defaultPlatform = require('@/platform/common');
-const { officerProblem, isKnownCode } = require('@/errors');
+const { officerProblem, isKnownCode } = require('@/domain/errors');
 
 /**
  * Creates the terminal Express error handler with safe client responses.
  * Errors carrying a machine code in `data.code` (repo/officer codes) are
  * rendered as Problem JSON (RFC 9457); everything else keeps the Boom
- * payload / generic 500 shape.
+ * payload / generic 500 shape. The platform is injected by the composition
+ * root (app.js) — presentation must not import platform/ directly
+ * (boundary rule).
  *
  * @param {object} options - Error-handler dependencies.
- * @param {object} [options.platform] - Platform logging implementation.
+ * @param {object} options.platform - Platform logging implementation.
  * @returns {Function} Express error middleware.
  */
-function createErrorHandler({ platform = defaultPlatform } = {}) {
+function createErrorHandler({ platform } = {}) {
+  if (!platform) throw new Error('createErrorHandler requires platform');
   // eslint-disable-next-line no-unused-vars -- Express requires the 4th error-middleware argument.
   return (error, request, response, _next) => {
     if (response.headersSent) return;

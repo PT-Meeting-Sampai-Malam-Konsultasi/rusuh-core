@@ -44,7 +44,8 @@
     "url": "git+https://github.com/PT-Meeting-Sampai-Malam-Konsultasi/rusuh-core.git"
   },
   "scripts": {
-    "check": "npm run format:check && npm run lint && npm run test:coverage",
+    "check": "npm run format:check && npm run lint && npm run check:boundaries && npm run test:coverage",
+    "check:boundaries": "node ../../scripts/check-boundaries.js .",
     "format:check": "prettier --check .",
     "format:write": "prettier --write .",
     "lint": "eslint .",

@@ -1,4 +1,4 @@
-const { apiError } = require('@/errors');
+const { apiError } = require('@/domain/errors');
 
 /**
  * Creates middleware requiring a valid account JWT + a server-side role

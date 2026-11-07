@@ -1,4 +1,4 @@
-const { makeTicket, makeEvent } = require('@/modules/officer/test-fixtures');
+const { makeTicket, makeEvent } = require('@/application/officer/__tests__/test-fixtures');
 const { createMemoryTicketStore } = require('../ticket-store');
 
 describe('memory ticket store', () => {

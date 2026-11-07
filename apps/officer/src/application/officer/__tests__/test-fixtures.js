@@ -1,6 +1,6 @@
-const { createNikCrypto, maskNik } = require('@/infrastructure/nik-crypto');
-const { createMemoryTicketStore } = require('@/infrastructure/ticket-store');
-const { createMemoryAuditStore } = require('@/infrastructure/audit-store');
+const { createNikCrypto, maskNik } = require('@/domain/nik');
+const { createMemoryTicketStore } = require('@/infrastructure/persistence/ticket-store');
+const { createMemoryAuditStore } = require('@/infrastructure/persistence/audit-store');
 
 /**
  * Test fixtures for the officer module. Not a test file.

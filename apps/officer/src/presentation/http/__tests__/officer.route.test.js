@@ -1,7 +1,7 @@
 const request = require('supertest');
-const { loadEnvironment } = require('@/config/environment');
+const { loadEnvironment } = require('@/infrastructure/config/environment');
 const { createApp } = require('@/app');
-const { TEST_NIK, makeOfficerDeps } = require('../test-fixtures');
+const { TEST_NIK, makeOfficerDeps } = require('@/application/officer/__tests__/test-fixtures');
 
 describe('officer routes', () => {
   const buildApp = (deps) => createApp({ config: loadEnvironment({}), officerDeps: deps });

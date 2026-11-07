@@ -4,11 +4,11 @@ require('module-alias').addAlias('@', __dirname);
 
 const express = require('express');
 const defaultPlatform = require('@/platform/common');
-const { createDuplicateKeyVerifier } = require('@/middleware/duplicate-json-keys');
-const { createResponseMiddleware } = require('@/middleware/response');
-const { createErrorHandler } = require('@/middleware/error-handler');
-const { notFound } = require('@/middleware/not-found');
-const { mountRoutes } = require('@/routes');
+const { createDuplicateKeyVerifier } = require('@/presentation/http/middleware/duplicate-json-keys');
+const { createResponseMiddleware } = require('@/presentation/http/middleware/response');
+const { createErrorHandler } = require('@/presentation/http/middleware/error-handler');
+const { notFound } = require('@/presentation/http/middleware/not-found');
+const { mountRoutes } = require('@/container');
 
 /**
  * Builds an Express application without binding a network port or starting jobs.

@@ -1,4 +1,4 @@
-const { createNikCrypto, maskNik } = require('../nik-crypto');
+const { createNikCrypto, maskNik } = require('../nik');
 
 describe('nik-crypto', () => {
   const key = Buffer.alloc(32, 7);

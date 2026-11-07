@@ -1,5 +1,5 @@
 const { verifyAccountToken } = require('@rusuh/auth');
-const { apiError } = require('@/errors');
+const { apiError } = require('@/domain/errors');
 
 /**
  * Production auth providers for the officer module.

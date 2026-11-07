@@ -1,13 +1,14 @@
-const defaultPlatform = require('@/platform/common');
-
 /**
  * Creates middleware that applies the platform response envelope and logs completion.
+ * The platform is injected by the composition root (app.js) — presentation
+ * must not import platform/ directly (boundary rule).
  *
  * @param {object} options - Response middleware dependencies.
- * @param {object} [options.platform] - Platform helper implementation.
+ * @param {object} options.platform - Platform helper implementation.
  * @returns {Function} Express middleware.
  */
-function createResponseMiddleware({ platform = defaultPlatform } = {}) {
+function createResponseMiddleware({ platform } = {}) {
+  if (!platform) throw new Error('createResponseMiddleware requires platform');
   return (request, response, next) => {
     const originalSend = response.send.bind(response);
     let responseLogged = false;

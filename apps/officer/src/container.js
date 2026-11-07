@@ -1,15 +1,22 @@
-const { createHealthService } = require('@/modules/health/health.service');
-const { createHealthController } = require('@/modules/health/health.controller');
-const { createHealthRouter } = require('@/modules/health/health.route');
-const { createOfficerService } = require('@/modules/officer/officer.service');
-const { createOfficerController } = require('@/modules/officer/officer.controller');
-const { createOfficerRouter } = require('@/modules/officer/officer.route');
-const { createRequireRole } = require('@/middleware/auth');
+/**
+ * COMPOSITION ROOT. Wires the layers together: builds the infrastructure
+ * adapters from config, injects them into the application use cases, and
+ * mounts the presentation routers. This file lives at src/ root (not in
+ * infrastructure/) because it imports from every layer — src/*.js files
+ * are exempt from the boundary check for exactly this reason.
+ */
+const { createHealthUseCase } = require('@/application/health/health.use-case');
+const { createHealthController } = require('@/presentation/http/controllers/health.controller');
+const { createHealthRouter } = require('@/presentation/http/routes/health.route');
+const { createOfficerUseCase } = require('@/application/officer/officer.use-case');
+const { createOfficerController } = require('@/presentation/http/controllers/officer.controller');
+const { createOfficerRouter } = require('@/presentation/http/routes/officer.route');
+const { createRequireRole } = require('@/presentation/http/middleware/auth');
 const { createDefaultVerifyToken, createPostgresRoleResolver } = require('@/infrastructure/auth-provider');
-const { createPostgresTicketStore, createPool } = require('@/infrastructure/ticket-store');
-const { createPostgresAuditStore } = require('@/infrastructure/audit-store');
-const { createNikCrypto } = require('@/infrastructure/nik-crypto');
-const { apiError } = require('@/errors');
+const { createPostgresTicketStore, createPool } = require('@/infrastructure/persistence/ticket-store');
+const { createPostgresAuditStore } = require('@/infrastructure/persistence/audit-store');
+const { createNikCrypto } = require('@/domain/nik');
+const { apiError } = require('@/domain/errors');
 
 /**
  * Builds officer dependencies from config when they are not injected.
@@ -57,14 +64,14 @@ function buildOfficerDeps(config) {
  * @returns {object} Mounted service modules.
  */
 function mountRoutes(app, { isReady, config, officerDeps } = {}) {
-  const healthService = createHealthService({ isReady });
-  const healthController = createHealthController(healthService);
+  const healthUseCase = createHealthUseCase({ isReady });
+  const healthController = createHealthController(healthUseCase);
 
   const deps = officerDeps || (config ? buildOfficerDeps(config) : null);
-  let officerService = null;
+  let officerUseCase = null;
   if (deps) {
-    officerService = createOfficerService(deps);
-    const officerController = createOfficerController(officerService);
+    officerUseCase = createOfficerUseCase(deps);
+    const officerController = createOfficerController(officerUseCase);
     const requireOfficer = createRequireRole({
       verifyToken: deps.verifyToken,
       roleResolver: deps.roleResolver,
@@ -75,7 +82,7 @@ function mountRoutes(app, { isReady, config, officerDeps } = {}) {
 
   app.use(createHealthRouter(healthController));
 
-  return { healthService, officerService };
+  return { healthUseCase, officerUseCase };
 }
 
 module.exports = { mountRoutes, buildOfficerDeps };

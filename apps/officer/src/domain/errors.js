@@ -1,4 +1,3 @@
-const Boom = require('@hapi/boom');
 const { ERROR_CODES, problem } = require('@rusuh/contracts');
 
 /**
@@ -55,17 +54,22 @@ function officerProblem(code, detail, extra = {}) {
 }
 
 /**
- * Creates a Boom error carrying the machine code in `data.code`, so the
- * error-handler middleware renders it as Problem JSON.
+ * Creates an error carrying the machine code in `code` and `data.code`, so
+ * the presentation error-handler middleware renders it as Problem JSON
+ * (RFC 9457) via officerProblem(). Plain Error, not Boom: the domain layer
+ * must not depend on npm packages (boundary rule), and the handler reads
+ * `error.code` / `error.data.code` — it never needs a Boom object.
  *
  * @param {string} code - Officer or repo error code.
  * @param {string} [detail] - Human-readable detail.
  * @param {object} [extra] - Extra Problem members.
- * @returns {Error} Boom error.
+ * @returns {Error} Error carrying code + data.code (+ HTTP status).
  */
 function apiError(code, detail, extra = {}) {
   const body = officerProblem(code, detail, extra);
-  const error = Boom.boomify(new Error(detail || body.title), { statusCode: body.status });
+  const error = new Error(detail || body.title);
+  error.code = code;
+  error.status = body.status;
   error.data = { code, ...extra };
   return error;
 }

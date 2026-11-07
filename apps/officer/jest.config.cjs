@@ -12,5 +12,9 @@ module.exports = {
   resetMocks: true,
   restoreMocks: true,
   setupFiles: ['<rootDir>/jest.setup.js'],
-  testEnvironment: 'node'
+  testEnvironment: 'node',
+  // Only *.test.js files are suites: __tests__/ also holds test support
+  // files (e.g. test-fixtures.js), which the default '**/__tests__/**'
+  // pattern would otherwise run as an empty suite and fail.
+  testMatch: ['**/__tests__/**/*.test.js', '**/?(*.)+(spec|test).js']
 };
