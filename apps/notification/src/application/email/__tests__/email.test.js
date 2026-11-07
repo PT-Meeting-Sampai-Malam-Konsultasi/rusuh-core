@@ -1,8 +1,9 @@
 const { validateJob } = require('../email.validation');
-const { renderEmail } = require('../email.templates');
-const { createMemoryEmailLogStore, decideClaim } = require('../email.log');
-const { createEmailSender, buildMimeMessage } = require('../email.sender');
-const { createEmailProcessor } = require('../email.processor');
+const { renderEmail } = require('../../../domain/email.templates');
+const { createMemoryEmailLogStore, decideClaim } = require('../../../infrastructure/persistence/email-log.store');
+const { createEmailSender } = require('../../../infrastructure/messaging/email.sender');
+const { buildMimeMessage } = require('../../../domain/mime');
+const { createEmailUseCase } = require('../email.use-case');
 
 const otpJob = {
   type: 'EMAIL_OTP',
@@ -187,14 +188,14 @@ describe('createEmailSender', () => {
   });
 });
 
-describe('createEmailProcessor', () => {
+describe('createEmailUseCase', () => {
   const config = { adminEmail: 'admin@rusuh-tiket.web.id', s3: { ticketBucket: 'rusuh-tickets' } };
   const logger = { addTags: () => logger, addData: () => logger, info: () => {}, error: () => {} };
 
   it('sends an OTP job without touching email_log', async () => {
     const logStore = createMemoryEmailLogStore({});
     const sender = { send: jest.fn(async () => 'ses-otp') };
-    const processor = createEmailProcessor({ logStore, sender, s3: {}, config, logger });
+    const processor = createEmailUseCase({ logStore, sender, s3: {}, config, logger });
     const result = await processor.process(otpJob);
     expect(result).toEqual({ outcome: 'sent', sesMessageId: 'ses-otp' });
     expect(sender.send).toHaveBeenCalledWith(expect.objectContaining({ to: 'user@example.id' }));
@@ -204,7 +205,7 @@ describe('createEmailProcessor', () => {
   it('returns invalid for a malformed job (no send, no claim)', async () => {
     const logStore = createMemoryEmailLogStore({});
     const sender = { send: jest.fn() };
-    const processor = createEmailProcessor({ logStore, sender, s3: {}, config, logger });
+    const processor = createEmailUseCase({ logStore, sender, s3: {}, config, logger });
     const result = await processor.process({ type: 'EMAIL_OTP', to: 'bad', variables: {} });
     expect(result.outcome).toBe('invalid');
     expect(sender.send).not.toHaveBeenCalled();
@@ -215,7 +216,7 @@ describe('createEmailProcessor', () => {
     await logStore.claim({ bookingId: 'bk_01', type: 'EMAIL_TICKET' });
     await logStore.markSent({ bookingId: 'bk_01', type: 'EMAIL_TICKET', sesMessageId: 'ses-1' });
     const sender = { send: jest.fn() };
-    const processor = createEmailProcessor({ logStore, sender, s3: {}, config, logger });
+    const processor = createEmailUseCase({ logStore, sender, s3: {}, config, logger });
     const result = await processor.process(ticketJob);
     expect(result.outcome).toBe('duplicate');
     expect(sender.send).not.toHaveBeenCalled();
@@ -225,7 +226,7 @@ describe('createEmailProcessor', () => {
     const logStore = createMemoryEmailLogStore({});
     await logStore.claim({ bookingId: 'bk_01', type: 'EMAIL_TICKET' });
     const sender = { send: jest.fn() };
-    const processor = createEmailProcessor({ logStore, sender, s3: {}, config, logger });
+    const processor = createEmailUseCase({ logStore, sender, s3: {}, config, logger });
     expect((await processor.process(ticketJob)).outcome).toBe('skipped');
     expect(sender.send).not.toHaveBeenCalled();
   });
@@ -237,7 +238,7 @@ describe('createEmailProcessor', () => {
       getObject: jest.fn(async () => Buffer.from('%PDF-1.4')),
       presignedGetUrl: jest.fn(async () => 'https://s3.example/dl/bk_01')
     };
-    const processor = createEmailProcessor({ logStore, sender, s3, config, logger });
+    const processor = createEmailUseCase({ logStore, sender, s3, config, logger });
     const result = await processor.process(ticketJob);
     expect(result).toEqual({ outcome: 'sent', sesMessageId: 'ses-ticket' });
     expect(s3.getObject).toHaveBeenCalledWith('rusuh-tickets', 'tickets/bk_01/SMD-FB-04827.pdf');
@@ -259,7 +260,7 @@ describe('createEmailProcessor', () => {
       }),
       presignedGetUrl: jest.fn()
     };
-    const processor = createEmailProcessor({ logStore, sender, s3, config, logger });
+    const processor = createEmailUseCase({ logStore, sender, s3, config, logger });
     const result = await processor.process(ticketJob);
     expect(result.outcome).toBe('failed');
     expect(sender.send).not.toHaveBeenCalled();
@@ -269,7 +270,7 @@ describe('createEmailProcessor', () => {
   it('sends an expired email with the D11 notice and marks it sent', async () => {
     const logStore = createMemoryEmailLogStore({});
     const sender = { send: jest.fn(async () => 'ses-exp') };
-    const processor = createEmailProcessor({ logStore, sender, s3: {}, config, logger });
+    const processor = createEmailUseCase({ logStore, sender, s3: {}, config, logger });
     const result = await processor.process(expiredJob);
     expect(result).toEqual({ outcome: 'sent', sesMessageId: 'ses-exp' });
     const sent = sender.send.mock.calls[0][0];
@@ -285,7 +286,7 @@ describe('createEmailProcessor', () => {
         throw new Error('SES 500');
       })
     };
-    const processor = createEmailProcessor({ logStore, sender, s3: {}, config, logger });
+    const processor = createEmailUseCase({ logStore, sender, s3: {}, config, logger });
     const result = await processor.process(expiredJob);
     expect(result.outcome).toBe('failed');
     expect(logStore._rows.get('bk_02:EXPIRED').status).toBe('failed');

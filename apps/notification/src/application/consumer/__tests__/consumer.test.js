@@ -1,4 +1,4 @@
-const { createConsumer } = require('../consumer');
+const { createConsumerUseCase } = require('../consumer.use-case');
 
 function makeSqs(batches) {
   let calls = 0;
@@ -23,7 +23,7 @@ const wait = (ms) =>
   });
 const noSleep = async () => {};
 
-describe('createConsumer', () => {
+describe('createConsumerUseCase', () => {
   it('deletes messages on sent/duplicate/skipped/invalid outcomes', async () => {
     const outcomes = [{ outcome: 'sent' }, { outcome: 'duplicate' }, { outcome: 'skipped' }, { outcome: 'invalid' }];
     const batches = [
@@ -41,7 +41,7 @@ describe('createConsumer', () => {
       call += 1;
       return outcome;
     });
-    const consumer = createConsumer({
+    const consumer = createConsumerUseCase({
       sqs,
       queueUrl: 'https://sqs.example/q',
       name: 'otp',
@@ -68,7 +68,7 @@ describe('createConsumer', () => {
         }
       ]
     ]);
-    const consumer = createConsumer({
+    const consumer = createConsumerUseCase({
       sqs,
       queueUrl: 'https://sqs.example/q',
       name: 'otp',
@@ -85,7 +85,7 @@ describe('createConsumer', () => {
   it('deletes a non-JSON message body instead of retrying it', async () => {
     const sqs = makeSqs([[{ messageId: 'm0', receiptHandle: 'rh0', body: 'not json {', attributes: {} }]]);
     const processMessage = jest.fn();
-    const consumer = createConsumer({
+    const consumer = createConsumerUseCase({
       sqs,
       queueUrl: 'https://sqs.example/q',
       name: 'otp',
@@ -110,7 +110,7 @@ describe('createConsumer', () => {
       }),
       delete: jest.fn()
     };
-    const consumer = createConsumer({
+    const consumer = createConsumerUseCase({
       sqs,
       queueUrl: 'https://sqs.example/q',
       name: 'otp',
@@ -134,7 +134,7 @@ describe('createConsumer', () => {
     const gate = new Promise((resolve) => {
       release = resolve;
     });
-    const consumer = createConsumer({
+    const consumer = createConsumerUseCase({
       sqs,
       queueUrl: 'https://sqs.example/q',
       name: 'otp',

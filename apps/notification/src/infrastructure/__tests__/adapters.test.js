@@ -1,7 +1,7 @@
-const { createSqsAdapter } = require('../sqs');
-const { createSesAdapter } = require('../ses');
-const { createS3Adapter } = require('../s3');
-const { createDbPool } = require('../db');
+const { createSqsAdapter } = require('../messaging/sqs');
+const { createSesAdapter } = require('../messaging/ses');
+const { createS3Adapter } = require('../messaging/s3');
+const { createDbPool } = require('../persistence/db');
 
 describe('SQS adapter', () => {
   it('maps received messages and deletes by receipt handle', async () => {

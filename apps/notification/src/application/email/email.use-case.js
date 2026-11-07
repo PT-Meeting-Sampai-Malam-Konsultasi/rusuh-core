@@ -1,10 +1,17 @@
-const { createLogger } = require('@rusuh/observability');
+const { renderEmail } = require('@/domain/email.templates');
 const { validateJob } = require('./email.validation');
-const { renderEmail } = require('./email.templates');
+
+/** Chainable console logger used when no logger is injected. */
+const fallbackLogger = {
+  addTags: () => fallbackLogger,
+  addData: () => fallbackLogger,
+  info: (...args) => console.info(...args),
+  error: (...args) => console.error(...args)
+};
 
 /**
- * Processes one notification job. Outcomes (the consumer deletes the SQS
- * message for every outcome except 'failed' and 'skipped'):
+ * Email use case: processes one notification job. Outcomes (the consumer
+ * deletes the SQS message for every outcome except 'failed' and 'skipped'):
  * - 'sent'      email sent via SES (and email_log marked sent)
  * - 'duplicate' already sent before (email_log 'sent') — no-op
  * - 'skipped'   another worker is sending it now (email_log 'sending', fresh)
@@ -13,25 +20,23 @@ const { renderEmail } = require('./email.templates');
  *
  * The OTP code is rendered into the email body but NEVER logged.
  *
- * @param {object} options - Processor dependencies.
- * @param {object} options.logStore - email_log store (Postgres or memory).
- * @param {object} options.sender - Email sender (SES + retry + rate limit).
- * @param {object} options.s3 - S3 adapter (PDF fetch + presigned URLs).
+ * Dependencies are the domain ports (domain/ports/ports.js): the log store,
+ * the sender and the S3 adapter are injected — this file never requires()
+ * an infrastructure file.
+ *
+ * @param {object} options - Use-case dependencies.
+ * @param {import('../../domain/ports/ports').EmailLogPort} options.logStore - email_log store (Postgres or memory).
+ * @param {import('../../domain/ports/ports').EmailSenderPort} options.sender - Email sender (SES + retry + rate limit).
+ * @param {import('../../domain/ports/ports').TicketStorePort} options.s3 - S3 adapter (PDF fetch + presigned URLs).
  * @param {object} options.config - Runtime config ({adminEmail, s3}).
- * @param {object} [options.logger] - Structured logger.
- * @returns {object} Processor with a `process()` method.
+ * @param {import('../../domain/ports/ports').LoggerPort} [options.logger] - Structured logger.
+ * @returns {object} Use case with a `process()` method.
  */
-function createEmailProcessor({
-  logStore,
-  sender,
-  s3,
-  config,
-  logger = createLogger({ service: 'notification' })
-} = {}) {
-  if (!logStore) throw new Error('createEmailProcessor requires a log store');
-  if (!sender) throw new Error('createEmailProcessor requires a sender');
-  if (!s3) throw new Error('createEmailProcessor requires an S3 adapter');
-  if (!config) throw new Error('createEmailProcessor requires config');
+function createEmailUseCase({ logStore, sender, s3, config, logger = fallbackLogger } = {}) {
+  if (!logStore) throw new Error('createEmailUseCase requires a log store');
+  if (!sender) throw new Error('createEmailUseCase requires a sender');
+  if (!s3) throw new Error('createEmailUseCase requires an S3 adapter');
+  if (!config) throw new Error('createEmailUseCase requires config');
 
   const log = (level, message, data) => {
     logger.addTags(['email', 'processor']).addData(data)[level](message);
@@ -107,4 +112,4 @@ function createEmailProcessor({
   };
 }
 
-module.exports = { createEmailProcessor };
+module.exports = { createEmailUseCase };

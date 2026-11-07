@@ -1,5 +1,7 @@
-const { loadEnvironment } = require('../config/environment');
-const { createWorker } = require('../worker');
+const { loadEnvironment } = require('../infrastructure/config/environment');
+const { createWorkerUseCase } = require('../application/worker/worker.use-case');
+const { createMemoryEmailLogStore } = require('../infrastructure/persistence/email-log.store');
+const { createEmailSender } = require('../infrastructure/messaging/email.sender');
 
 const silentLogger = { addTags: () => silentLogger, addData: () => silentLogger, info: () => {}, error: () => {} };
 
@@ -14,10 +16,20 @@ function fakeAdapters() {
   };
 }
 
-describe('createWorker', () => {
+function makeWorker(config, adapters, logger) {
+  const logStore = createMemoryEmailLogStore({ staleMinutes: config.claimStaleMinutes });
+  const sender = createEmailSender({
+    ses: adapters.ses,
+    from: config.ses.fromEmail,
+    maxSendsPerSecond: config.ses.maxSendsPerSecond
+  });
+  return createWorkerUseCase({ config, sqs: adapters.sqs, s3: adapters.s3, pool: null, logStore, sender, logger });
+}
+
+describe('createWorkerUseCase', () => {
   it('starts with no queues when none are configured', async () => {
     const config = loadEnvironment({});
-    const worker = createWorker({ config, ...fakeAdapters(), pool: null, logger: silentLogger });
+    const worker = makeWorker(config, fakeAdapters(), silentLogger);
     expect(worker.consumers).toHaveLength(0);
     expect(worker.isHealthy()).toBe(true);
     const started = await worker.start();
@@ -31,7 +43,7 @@ describe('createWorker', () => {
       SQS_OTP_QUEUE_URL: 'https://sqs.ap-southeast-3.amazonaws.com/123/rusuh-otp',
       SQS_EMAIL_QUEUE_URL: 'https://sqs.ap-southeast-3.amazonaws.com/123/rusuh-email'
     });
-    const worker = createWorker({ config, ...fakeAdapters(), pool: null, logger: silentLogger });
+    const worker = makeWorker(config, fakeAdapters(), silentLogger);
     expect(worker.consumers.map((consumer) => consumer.name)).toEqual(['otp', 'email']);
     await worker.start();
     expect(worker.isHealthy()).toBe(true);
@@ -45,7 +57,7 @@ describe('createWorker', () => {
       WORKER_ENABLED: 'false',
       SQS_OTP_QUEUE_URL: 'https://sqs.ap-southeast-3.amazonaws.com/123/rusuh-otp'
     });
-    const worker = createWorker({ config, ...fakeAdapters(), pool: null, logger: silentLogger });
+    const worker = makeWorker(config, fakeAdapters(), silentLogger);
     expect(worker.consumers).toHaveLength(0);
     await worker.start();
     await expect(worker.stop()).resolves.toBe(true);
@@ -64,7 +76,7 @@ describe('createWorker', () => {
         ? [{ messageId: 'm1', receiptHandle: 'rh1', body: JSON.stringify(otpJob), attributes: {} }]
         : [];
     });
-    const worker = createWorker({ config, ...adapters, pool: null, logger: silentLogger });
+    const worker = makeWorker(config, adapters, silentLogger);
     await worker.start();
     await new Promise((resolve) => {
       setTimeout(resolve, 100);

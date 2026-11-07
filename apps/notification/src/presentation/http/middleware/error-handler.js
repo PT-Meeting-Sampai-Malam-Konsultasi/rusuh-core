@@ -1,5 +1,5 @@
 const Boom = require('@hapi/boom');
-const defaultPlatform = require('@/platform/common');
+const fallbackPlatform = require('./fallback-platform');
 
 /**
  * Creates the terminal Express error handler with safe client responses.
@@ -8,7 +8,7 @@ const defaultPlatform = require('@/platform/common');
  * @param {object} [options.platform] - Platform logging implementation.
  * @returns {Function} Express error middleware.
  */
-function createErrorHandler({ platform = defaultPlatform } = {}) {
+function createErrorHandler({ platform = fallbackPlatform } = {}) {
   // eslint-disable-next-line no-unused-vars -- Express requires the 4th error-middleware argument.
   return (error, request, response, _next) => {
     if (response.headersSent) return;

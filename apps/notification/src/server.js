@@ -3,9 +3,9 @@ require('dotenv').config();
 
 const http = require('http');
 const defaultPlatform = require('@/platform/common');
-const { loadEnvironment } = require('@/config/environment');
+const { loadEnvironment } = require('@/infrastructure/config/environment');
 const { createApp } = require('@/app');
-const { createWorker } = require('@/worker');
+const { createContainer } = require('@/container');
 
 /**
  * Starts the HTTP server (health endpoints only — this module has no public
@@ -15,7 +15,7 @@ const { createWorker } = require('@/worker');
  */
 function startServer() {
   const config = loadEnvironment();
-  const worker = createWorker({ config });
+  const { worker } = createContainer({ config });
   const app = createApp({ config, isReady: () => worker.isHealthy() });
   const server = http.createServer(app);
   let shuttingDown = false;

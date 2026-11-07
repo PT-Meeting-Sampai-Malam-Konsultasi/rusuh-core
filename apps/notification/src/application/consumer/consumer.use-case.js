@@ -1,15 +1,24 @@
-const { createLogger } = require('@rusuh/observability');
+/** Chainable console logger used when no logger is injected. */
+const fallbackLogger = {
+  addTags: () => fallbackLogger,
+  addData: () => fallbackLogger,
+  info: (...args) => console.info(...args),
+  error: (...args) => console.error(...args)
+};
 
 /** Outcomes for which the SQS message is deleted (not redelivered). */
 const DELETE_OUTCOMES = new Set(['sent', 'duplicate', 'skipped', 'invalid']);
 
 /**
- * Creates an SQS consumer: long-polls one queue, processes each message,
+ * Consumer use case: long-polls one queue, processes each message,
  * deletes it on a terminal outcome, leaves it for redelivery on failure
  * (visibility timeout -> retry -> DLQ after maxReceiveCount).
  *
- * @param {object} options - Consumer dependencies.
- * @param {object} options.sqs - SQS adapter.
+ * The SQS adapter is the injected QueuePort (domain/ports/ports.js) —
+ * this file never requires() an infrastructure file.
+ *
+ * @param {object} options - Use-case dependencies.
+ * @param {import('../../domain/ports/ports').QueuePort} options.sqs - SQS adapter.
  * @param {string} options.queueUrl - Queue URL.
  * @param {string} options.name - Consumer name (otp | email, for logs).
  * @param {Function} options.processMessage - Async (parsed body) => {outcome}.
@@ -18,10 +27,10 @@ const DELETE_OUTCOMES = new Set(['sent', 'duplicate', 'skipped', 'invalid']);
  * @param {number} [options.waitTimeSeconds] - Long-poll duration (default 20).
  * @param {number} [options.pollErrorDelayMs] - Delay after a receive error (default 1000).
  * @param {Function} [options.sleep] - Sleep (ms) implementation (tests).
- * @param {object} [options.logger] - Structured logger.
- * @returns {object} Consumer with start/stop/isRunning.
+ * @param {import('../../domain/ports/ports').LoggerPort} [options.logger] - Structured logger.
+ * @returns {object} Use case with start/stop/isRunning.
  */
-function createConsumer({
+function createConsumerUseCase({
   sqs,
   queueUrl,
   name,
@@ -34,11 +43,11 @@ function createConsumer({
     new Promise((resolve) => {
       setTimeout(resolve, ms);
     }),
-  logger = createLogger({ service: 'notification' })
+  logger = fallbackLogger
 } = {}) {
-  if (!sqs) throw new Error('createConsumer requires an SQS adapter');
-  if (!queueUrl) throw new Error('createConsumer requires a queue URL');
-  if (!processMessage) throw new Error('createConsumer requires a processMessage function');
+  if (!sqs) throw new Error('createConsumerUseCase requires an SQS adapter');
+  if (!queueUrl) throw new Error('createConsumerUseCase requires a queue URL');
+  if (!processMessage) throw new Error('createConsumerUseCase requires a processMessage function');
 
   let running = false;
   let loopPromise = null;
@@ -145,4 +154,4 @@ function createConsumer({
   };
 }
 
-module.exports = { createConsumer, DELETE_OUTCOMES };
+module.exports = { createConsumerUseCase, DELETE_OUTCOMES };
