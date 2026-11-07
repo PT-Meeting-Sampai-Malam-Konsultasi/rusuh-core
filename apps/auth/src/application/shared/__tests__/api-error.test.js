@@ -35,4 +35,27 @@ describe('api-error', () => {
     expect(status).toBe(500);
     expect(body.code).toBe('INTERNAL_ERROR');
   });
+
+  it('toProblem attaches the traceId for a repo code', () => {
+    const error = apiError('WRONG_CODE', 'Kode salah', { attemptsLeft: 1 });
+    const { status, body } = toProblem(error, 'trace-9');
+    expect(status).toBe(409);
+    expect(body.traceId).toBe('trace-9');
+  });
+
+  it('toProblem renders a generic Boom error with its own title and traceId', () => {
+    const { status, body } = toProblem(Boom.badRequest('Bad input'), 'trace-2');
+    expect(status).toBe(400);
+    expect(body.code).toBe('BAD_REQUEST');
+    expect(body.title).toBe('Bad Request');
+    expect(body.traceId).toBe('trace-2');
+  });
+
+  it('toProblem renders a plain error with no message as 500', () => {
+    const error = new Error();
+    const { status, body } = toProblem(error);
+    expect(status).toBe(500);
+    expect(body.code).toBe('INTERNAL_ERROR');
+    expect(body.detail).toBe('An unexpected error occurred');
+  });
 });

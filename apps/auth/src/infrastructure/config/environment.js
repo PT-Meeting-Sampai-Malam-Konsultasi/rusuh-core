@@ -18,7 +18,7 @@ const environmentSchema = Joi.object({
   OTP_SECRET: Joi.string().optional(),
   // Comma-separated CORS origins. When unset/empty, the production
   // domains + local dev origins are used (see DEFAULT_CORS_ORIGINS).
-  CORS_ORIGINS: Joi.string().optional()
+  CORS_ORIGINS: Joi.string().allow('').optional()
 }).unknown(true);
 
 /** Default CORS origins (production domains + local dev). */

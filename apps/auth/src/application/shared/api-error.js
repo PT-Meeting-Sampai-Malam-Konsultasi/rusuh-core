@@ -68,7 +68,10 @@ function toProblem(error, traceId) {
     return { status: body.status, body };
   }
 
-  const status = Boom.isBoom(error) ? error.output.statusCode : 500;
+  // A generic code carried in error.data (e.g. the error-handler's
+  // malformed-JSON 'BAD_REQUEST') sets the status too; a plain error
+  // with no code is a 500.
+  const status = Boom.isBoom(error) ? error.output.statusCode : GENERIC_STATUS[data.code] || 500;
   const code = GENERIC_CODES[status] || 'INTERNAL_ERROR';
   // Build the body directly: @rusuh/contracts problem() only knows the repo
   // ERROR_CODES, so a generic code would fall back to a 500 body.
