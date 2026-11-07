@@ -10,8 +10,34 @@ const environmentSchema = Joi.object({
   NIK_ENCRYPTION_KEY: Joi.string().optional(),
   AUTH_PUBLIC_KEYS_JSON: Joi.string().optional(),
   AUTH_AUDIENCE: Joi.string().optional(),
-  AUTH_ISSUER: Joi.string().optional()
+  AUTH_ISSUER: Joi.string().optional(),
+  CORS_ORIGINS: Joi.string().optional()
 }).unknown(true);
+
+// Default CORS origins when CORS_ORIGINS is unset or empty: the production
+// web (rusuh-tiket.web.id) plus the local dev frontends.
+const DEFAULT_CORS_ORIGINS = [
+  'https://rusuh-tiket.web.id',
+  'https://www.rusuh-tiket.web.id',
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
+
+/**
+ * Parses a comma-separated CORS_ORIGINS string into an array of origins.
+ * Empty entries are dropped; when nothing remains, the default origins
+ * are returned.
+ *
+ * @param {string} [origins] - Comma-separated origins.
+ * @returns {string[]} Origin list.
+ */
+function parseCorsOrigins(origins) {
+  const parsed = String(origins || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+  return parsed.length > 0 ? parsed : [...DEFAULT_CORS_ORIGINS];
+}
 
 /**
  * Parses AUTH_PUBLIC_KEYS_JSON ({ kid: JWK }) into a Map.
@@ -62,8 +88,9 @@ function loadEnvironment(environment = process.env) {
     nikEncryptionKey: value.NIK_ENCRYPTION_KEY || null,
     authPublicKeys: parsePublicKeys(value.AUTH_PUBLIC_KEYS_JSON),
     authAudience: value.AUTH_AUDIENCE || null,
-    authIssuer: value.AUTH_ISSUER || null
+    authIssuer: value.AUTH_ISSUER || null,
+    corsOrigins: parseCorsOrigins(value.CORS_ORIGINS)
   };
 }
 
-module.exports = { loadEnvironment };
+module.exports = { loadEnvironment, parseCorsOrigins, DEFAULT_CORS_ORIGINS };

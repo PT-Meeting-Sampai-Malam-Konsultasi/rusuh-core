@@ -99,3 +99,12 @@ npm run check     # format + lint + tests + coverage
 Tests run without a live database (in-memory stores + injected auth). Set
 `DATABASE_URL` for the Postgres store; without it the officer endpoints fail
 closed with 503 `SERVICE_UNAVAILABLE` (health endpoints still work).
+
+## Security headers & CORS
+
+Every response carries helmet's default security headers (e.g.
+`x-content-type-options: nosniff`, `x-frame-options`). CORS is enabled with
+the origins from `CORS_ORIGINS` (comma-separated; default
+`https://rusuh-tiket.web.id,https://www.rusuh-tiket.web.id,http://localhost:3000,http://localhost:5173`).
+Both middlewares are wired in `src/app.js` before the routes are mounted.
+This is a JSON API (no HTML is rendered), so helmet's defaults are fine.
