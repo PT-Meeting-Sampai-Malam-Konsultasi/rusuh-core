@@ -85,4 +85,77 @@ describe('createWorkerUseCase', () => {
     expect(adapters.ses.sendEmail).toHaveBeenCalledTimes(1);
     expect(adapters.sqs.delete).toHaveBeenCalledWith(expect.stringContaining('rusuh-otp'), 'rh1');
   });
+
+  it('throws when a required dependency is missing', () => {
+    const config = loadEnvironment({});
+    const adapters = fakeAdapters();
+    const logStore = createMemoryEmailLogStore({ staleMinutes: config.claimStaleMinutes });
+    const sender = createEmailSender({
+      ses: adapters.ses,
+      from: config.ses.fromEmail,
+      maxSendsPerSecond: config.ses.maxSendsPerSecond
+    });
+    const base = { config, sqs: adapters.sqs, s3: adapters.s3, pool: null, logStore, sender, logger: silentLogger };
+    expect(() => createWorkerUseCase({ ...base, config: undefined })).toThrow('requires config');
+    expect(() => createWorkerUseCase({ ...base, sqs: undefined })).toThrow('requires an SQS adapter');
+    expect(() => createWorkerUseCase({ ...base, s3: undefined })).toThrow('requires an S3 adapter');
+    expect(() => createWorkerUseCase({ ...base, logStore: undefined })).toThrow('requires a log store');
+    expect(() => createWorkerUseCase({ ...base, sender: undefined })).toThrow('requires a sender');
+  });
+
+  it('ends the pool on stop and returns true when never started', async () => {
+    const config = loadEnvironment({});
+    const adapters = fakeAdapters();
+    const pool = { end: jest.fn(async () => {}) };
+    const logStore = createMemoryEmailLogStore({ staleMinutes: config.claimStaleMinutes });
+    const sender = createEmailSender({
+      ses: adapters.ses,
+      from: config.ses.fromEmail,
+      maxSendsPerSecond: config.ses.maxSendsPerSecond
+    });
+    const worker = createWorkerUseCase({
+      config,
+      sqs: adapters.sqs,
+      s3: adapters.s3,
+      pool,
+      logStore,
+      sender,
+      logger: silentLogger
+    });
+    await expect(worker.stop()).resolves.toBe(true);
+    expect(pool.end).not.toHaveBeenCalled();
+    await worker.start();
+    await expect(worker.stop()).resolves.toBe(true);
+    expect(pool.end).toHaveBeenCalledTimes(1);
+  });
+
+  it('start is idempotent', async () => {
+    const config = loadEnvironment({});
+    const worker = makeWorker(config, fakeAdapters(), silentLogger);
+    const first = await worker.start();
+    const second = await worker.start();
+    expect(first).toEqual({ consumers: 0 });
+    expect(second).toEqual({ consumers: 0 });
+    await worker.stop();
+  });
+
+  it('uses the fallback console logger when no logger is injected', async () => {
+    const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      const config = loadEnvironment({});
+      const adapters = fakeAdapters();
+      const logStore = createMemoryEmailLogStore({ staleMinutes: config.claimStaleMinutes });
+      const sender = createEmailSender({
+        ses: adapters.ses,
+        from: config.ses.fromEmail,
+        maxSendsPerSecond: config.ses.maxSendsPerSecond
+      });
+      const worker = createWorkerUseCase({ config, sqs: adapters.sqs, s3: adapters.s3, pool: null, logStore, sender });
+      await worker.start();
+      await worker.stop();
+      expect(infoSpy).toHaveBeenCalledWith('Worker started with no queues configured (health endpoints only)');
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
 });

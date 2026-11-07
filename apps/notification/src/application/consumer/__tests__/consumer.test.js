@@ -152,4 +152,78 @@ describe('createConsumerUseCase', () => {
     await expect(stopping).resolves.toBe(true);
     expect(sqs.deleted).toEqual(['rh0']);
   });
+
+  it('throws when a required dependency is missing', () => {
+    const sqs = makeSqs([]);
+    const base = {
+      sqs,
+      queueUrl: 'https://sqs.example/q',
+      name: 'otp',
+      processMessage: jest.fn(),
+      sleep: noSleep,
+      logger: silentLogger
+    };
+    expect(() => createConsumerUseCase({ ...base, sqs: undefined })).toThrow('requires an SQS adapter');
+    expect(() => createConsumerUseCase({ ...base, queueUrl: undefined })).toThrow('requires a queue URL');
+    expect(() => createConsumerUseCase({ ...base, processMessage: undefined })).toThrow(
+      'requires a processMessage function'
+    );
+  });
+
+  it('leaves a message for redelivery when processMessage throws', async () => {
+    const sqs = makeSqs([
+      [{ messageId: 'm0', receiptHandle: 'rh0', body: JSON.stringify({ type: 'EMAIL_OTP' }), attributes: {} }]
+    ]);
+    const consumer = createConsumerUseCase({
+      sqs,
+      queueUrl: 'https://sqs.example/q',
+      name: 'otp',
+      processMessage: jest.fn(async () => {
+        throw new Error('processor down');
+      }),
+      sleep: noSleep,
+      logger: silentLogger
+    });
+    consumer.start();
+    await wait(50);
+    await consumer.stop(1000);
+    expect(sqs.deleted).toEqual([]);
+  });
+
+  it('stop returns true when never started and start is idempotent', async () => {
+    const sqs = makeSqs([]);
+    const consumer = createConsumerUseCase({
+      sqs,
+      queueUrl: 'https://sqs.example/q',
+      name: 'otp',
+      processMessage: jest.fn(),
+      sleep: noSleep,
+      logger: silentLogger
+    });
+    await expect(consumer.stop()).resolves.toBe(true);
+    consumer.start();
+    consumer.start();
+    expect(consumer.isRunning()).toBe(true);
+    await expect(consumer.stop(1000)).resolves.toBe(true);
+  });
+
+  it('uses the fallback console logger when no logger is injected', async () => {
+    const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      const sqs = makeSqs([]);
+      const consumer = createConsumerUseCase({
+        sqs,
+        queueUrl: 'https://sqs.example/q',
+        name: 'otp',
+        processMessage: jest.fn(),
+        sleep: noSleep
+      });
+      consumer.start();
+      await wait(20);
+      await consumer.stop(1000);
+      expect(infoSpy).toHaveBeenCalledWith('Consumer started');
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
 });

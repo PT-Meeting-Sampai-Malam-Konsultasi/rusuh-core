@@ -291,4 +291,58 @@ describe('createEmailUseCase', () => {
     expect(result.outcome).toBe('failed');
     expect(logStore._rows.get('bk_02:EXPIRED').status).toBe('failed');
   });
+
+  it('throws when a required dependency is missing', () => {
+    const logStore = createMemoryEmailLogStore({});
+    const sender = { send: jest.fn() };
+    const base = { logStore, sender, s3: {}, config, logger };
+    expect(() => createEmailUseCase({ ...base, logStore: undefined })).toThrow('requires a log store');
+    expect(() => createEmailUseCase({ ...base, sender: undefined })).toThrow('requires a sender');
+    expect(() => createEmailUseCase({ ...base, s3: undefined })).toThrow('requires an S3 adapter');
+    expect(() => createEmailUseCase({ ...base, config: undefined })).toThrow('requires config');
+  });
+
+  it('fails a ticket job when the S3 ticket bucket is not configured', async () => {
+    const logStore = createMemoryEmailLogStore({});
+    const sender = { send: jest.fn() };
+    const s3 = { getObject: jest.fn(), presignedGetUrl: jest.fn() };
+    const noBucketConfig = { adminEmail: 'admin@rusuh-tiket.web.id', s3: { ticketBucket: '' } };
+    const processor = createEmailUseCase({ logStore, sender, s3, config: noBucketConfig, logger });
+    const result = await processor.process(ticketJob);
+    expect(result.outcome).toBe('failed');
+    expect(result.error).toContain('S3 ticket bucket is not configured');
+    expect(sender.send).not.toHaveBeenCalled();
+    expect(s3.getObject).not.toHaveBeenCalled();
+    expect(logStore._rows.get('bk_01:TICKET').status).toBe('failed');
+  });
+
+  it('uses the job admin_email for an expired email when present', async () => {
+    const logStore = createMemoryEmailLogStore({});
+    const sender = { send: jest.fn(async () => 'ses-exp') };
+    const processor = createEmailUseCase({ logStore, sender, s3: {}, config, logger });
+    const job = { ...expiredJob, variables: { ...expiredJob.variables, admin_email: 'help@rusuh-tiket.web.id' } };
+    const result = await processor.process(job);
+    expect(result.outcome).toBe('sent');
+    expect(sender.send.mock.calls[0][0].text).toContain('help@rusuh-tiket.web.id');
+  });
+
+  it('uses the fallback console logger and never logs the OTP code', async () => {
+    const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const logStore = createMemoryEmailLogStore({});
+      const sender = { send: jest.fn(async () => 'ses-otp') };
+      const processor = createEmailUseCase({ logStore, sender, s3: {}, config });
+      const result = await processor.process(otpJob);
+      expect(result.outcome).toBe('sent');
+      const logged = [...infoSpy.mock.calls, ...errorSpy.mock.calls].flatMap((call) =>
+        call.map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg)))
+      );
+      expect(logged.join(' ')).not.toContain('123456');
+      expect(infoSpy).toHaveBeenCalledWith('Email sent');
+    } finally {
+      infoSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
 });
