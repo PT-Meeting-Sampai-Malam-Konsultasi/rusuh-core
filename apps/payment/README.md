@@ -10,7 +10,7 @@ HTTP notification webhook + Get Status API.
   `POST /v1/webhooks/midtrans` — Midtrans HTTP notification.
 - Internal functions (used by core-module via internal call; no extra
   public routes): `createSnapTransaction`, `confirmViaGetStatus`,
-  `expireOrder` (see `src/modules/`).
+  `expireOrder` (see `src/application/`).
 
 ## How it works
 
@@ -78,7 +78,7 @@ return via App Link) is FE work — this module only returns
 - Default: in-memory store (`PAYMENT_STORE=memory`, or when no
   `DATABASE_URL` is set) — tests and local runs need no live database.
 - Postgres: set `DATABASE_URL` (or `PAYMENT_STORE=postgres`). Schema in
-  `src/infrastructure/store/schema.sql` (`payment_orders`,
+  `src/infrastructure/persistence/schema.sql` (`payment_orders`,
   `payment_attempts`, `callback_log`; `UNIQUE(transaction_id)`).
   The Postgres store is implemented but was NOT tested against a live
   database in this VM (none available).

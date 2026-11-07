@@ -12,5 +12,9 @@ module.exports = {
   resetMocks: true,
   restoreMocks: true,
   setupFiles: ['<rootDir>/jest.setup.js'],
-  testEnvironment: 'node'
+  testEnvironment: 'node',
+  // webhook-test-harness.js is a test helper living in __tests__/ (so the
+  // Onion boundary check exempts it); it holds no tests, so jest must not
+  // collect it as a suite.
+  testPathIgnorePatterns: ['/node_modules/', 'webhook-test-harness']
 };

@@ -2,11 +2,12 @@ require('./alias');
 
 const express = require('express');
 const defaultPlatform = require('@/platform/common');
-const { createDuplicateKeyVerifier } = require('@/middleware/duplicate-json-keys');
-const { createResponseMiddleware } = require('@/middleware/response');
-const { createErrorHandler } = require('@/middleware/error-handler');
-const { notFound } = require('@/middleware/not-found');
-const { mountRoutes } = require('@/routes');
+const { createDuplicateKeyVerifier } = require('@/presentation/http/middleware/duplicate-json-keys');
+const { createResponseMiddleware } = require('@/presentation/http/middleware/response');
+const { createErrorHandler } = require('@/presentation/http/middleware/error-handler');
+const { notFound } = require('@/presentation/http/middleware/not-found');
+const { buildPaymentDeps } = require('@/container');
+const { mountRoutes } = require('@/presentation/http/routes');
 
 /**
  * Builds an Express application without binding a network port or starting jobs.
@@ -32,7 +33,10 @@ function createApp({ config, platform = defaultPlatform, isReady, deps } = {}) {
   );
   app.use(express.urlencoded({ extended: true, limit: config.bodyLimit }));
 
-  mountRoutes(app, { platform, isReady, config, deps });
+  // The container builds the adapters + use cases (composition root);
+  // the presentation layer only mounts the routes onto them.
+  const paymentDeps = deps || (config ? buildPaymentDeps(config) : null);
+  mountRoutes(app, { platform, isReady, config, deps: paymentDeps });
   app.use(notFound);
   app.use(createErrorHandler({ platform }));
 
