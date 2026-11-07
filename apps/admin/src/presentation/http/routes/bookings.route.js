@@ -1,5 +1,5 @@
 const express = require('express');
-const { wrapController } = require('@/middleware/async-handler');
+const { wrapController } = require('@/presentation/http/middleware/async-handler');
 
 /**
  * Creates the admin booking router (LLD-05 §6.1–§6.2). Admin-only.

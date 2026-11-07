@@ -1,5 +1,5 @@
 const express = require('express');
-const { wrapController } = require('@/middleware/async-handler');
+const { wrapController } = require('@/presentation/http/middleware/async-handler');
 
 /**
  * Creates the admin event router (LLD-05 §5.1–§5.2). All routes are

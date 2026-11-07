@@ -1,6 +1,6 @@
-const { loadEnvironment } = require('@/config/environment');
+const { loadEnvironment } = require('@/infrastructure/config/environment');
 const { createApp } = require('@/app');
-const { createMemoryStore } = require('@/infrastructure/memory-store');
+const { createMemoryStore } = require('@/infrastructure/persistence/memory-store');
 
 /**
  * Test app factory: memory store + a mock token verifier.

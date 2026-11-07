@@ -1,11 +1,11 @@
 /**
- * Admin user service (LLD-05 §6.3, read side only in this story).
+ * Admin user use case (LLD-05 §6.3, read side only in this story).
  * User creation / role change are not in this story's scope (see report).
  *
- * @param {object} store - Store with listUsers.
+ * @param {import('@/domain/ports/store.port').AdminStore} store - Store with listUsers.
  * @returns {object} User operations.
  */
-function createUsersService(store) {
+function createUsersUseCase(store) {
   return {
     async listUsers({ role, page, limit }) {
       return store.listUsers({ role, page, limit });
@@ -13,4 +13,4 @@ function createUsersService(store) {
   };
 }
 
-module.exports = { createUsersService };
+module.exports = { createUsersUseCase };

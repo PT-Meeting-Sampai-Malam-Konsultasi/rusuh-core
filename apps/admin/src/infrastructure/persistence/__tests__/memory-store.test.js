@@ -1,4 +1,4 @@
-const { createMemoryStore } = require('@/infrastructure/memory-store');
+const { createMemoryStore } = require('@/infrastructure/persistence/memory-store');
 
 describe('createMemoryStore', () => {
   it('computes slot stats from booking states (ticket units)', async () => {

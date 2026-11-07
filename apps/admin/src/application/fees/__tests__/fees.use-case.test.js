@@ -1,6 +1,6 @@
-const { createMemoryStore } = require('@/infrastructure/memory-store');
-const { createAuditService } = require('@/modules/audit/audit.service');
-const { createFeesService, calculateFees } = require('@/modules/fees/fees.service');
+const { createMemoryStore } = require('@/infrastructure/persistence/memory-store');
+const { createAuditUseCase } = require('@/application/audit/audit.use-case');
+const { createFeesUseCase, calculateFees } = require('@/application/fees/fees.use-case');
 
 const actor = { accountId: 'acc_admin_01', email: 'admin@rusuh.id', role: 'admin' };
 
@@ -49,13 +49,13 @@ describe('calculateFees', () => {
   });
 });
 
-describe('createFeesService', () => {
+describe('createFeesUseCase', () => {
   let store;
   let service;
 
   beforeEach(() => {
     store = createMemoryStore();
-    service = createFeesService(store, createAuditService(store));
+    service = createFeesUseCase(store, createAuditUseCase(store));
   });
 
   it('returns the default fee config', async () => {

@@ -1,5 +1,5 @@
 const express = require('express');
-const { wrapController } = require('@/middleware/async-handler');
+const { wrapController } = require('@/presentation/http/middleware/async-handler');
 
 /**
  * Creates the admin user router (LLD-05 §6.3, read side). Admin-only.

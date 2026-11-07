@@ -1,14 +1,15 @@
 const Boom = require('@hapi/boom');
-const defaultPlatform = require('@/platform/common');
 
 /**
  * Creates the terminal Express error handler with safe client responses.
  *
  * @param {object} options - Error-handler dependencies.
- * @param {object} [options.platform] - Platform logging implementation.
+ * @param {object} options.platform - Platform logging implementation (injected by the
+ *   composition root; the presentation layer must not require() platform/).
  * @returns {Function} Express error middleware.
  */
-function createErrorHandler({ platform = defaultPlatform } = {}) {
+function createErrorHandler({ platform } = {}) {
+  if (!platform) throw new Error('createErrorHandler requires platform');
   // eslint-disable-next-line no-unused-vars -- Express requires the 4th error-middleware argument.
   return (error, request, response, _next) => {
     if (response.headersSent) return;

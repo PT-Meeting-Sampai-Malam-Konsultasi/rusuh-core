@@ -1,8 +1,5 @@
 const Joi = require('joi');
 
-/** CAP tier multipliers (D7): 1x / 3x / 10x total stock. */
-const CAP_TIERS = Object.freeze({ 1: 1, 3: 3, 10: 10 });
-
 const categorySchema = Joi.object({
   name: Joi.string().min(1).max(100).required(),
   price: Joi.number().integer().min(0).required(),
@@ -40,4 +37,4 @@ const paginationSchema = Joi.object({
   limit: Joi.number().integer().min(1).max(100).default(20)
 });
 
-module.exports = { CAP_TIERS, createEventSchema, updateEventSchema, capSchema, paginationSchema };
+module.exports = { createEventSchema, updateEventSchema, capSchema, paginationSchema };

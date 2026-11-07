@@ -1,18 +1,18 @@
-const { ApiError } = require('@/errors');
+const { ApiError } = require('@/domain/errors');
 
 /**
- * Queue-admin service (J8 A / item 13, 6 Nov). The backoffice calls the
+ * Queue-admin use case (J8 A / item 13, 6 Nov). The backoffice calls the
  * queue-module admin API (private port) to pause/resume/close a queue;
- * the queue owns the `paused` state. This service validates the request,
+ * the queue owns the `paused` state. This use case validates the request,
  * forwards it through the injected queue client, and audits the change.
  * A pause is equivalent to cap=0 (no new admission, item 13).
  *
- * @param {object} store - Store (event lookup + audit).
- * @param {object} audit - Audit service.
- * @param {object} queueClient - Queue admin API client.
+ * @param {import('@/domain/ports/store.port').AdminStore} store - Store (event lookup + audit).
+ * @param {object} audit - Audit use case.
+ * @param {import('@/domain/ports/queue-admin.port').QueueAdminClient} queueClient - Queue admin API client.
  * @returns {object} Queue operations.
  */
-function createQueueService(store, audit, queueClient) {
+function createQueueUseCase(store, audit, queueClient) {
   return {
     async updateQueue(eventId, body, actor) {
       const event = await store.getEvent(eventId);
@@ -37,4 +37,4 @@ function createQueueService(store, audit, queueClient) {
   };
 }
 
-module.exports = { createQueueService };
+module.exports = { createQueueUseCase };

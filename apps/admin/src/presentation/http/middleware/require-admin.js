@@ -1,4 +1,4 @@
-const { ApiError } = require('@/errors');
+const { ApiError } = require('@/domain/errors');
 
 /**
  * Admin-only guard (LLD-05 §2). The account JWT (email+OTP, auth-module)

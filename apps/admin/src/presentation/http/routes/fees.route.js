@@ -1,5 +1,5 @@
 const express = require('express');
-const { wrapController } = require('@/middleware/async-handler');
+const { wrapController } = require('@/presentation/http/middleware/async-handler');
 
 /**
  * Creates the admin fee-config router (LLD-05 §5.3). Admin-only.

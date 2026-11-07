@@ -3,10 +3,10 @@
  * here AND to the operational log (Q40). Full NIK is NEVER written —
  * only nik_masked, and only the fact that a full NIK was viewed.
  *
- * @param {object} store - Store with insertAudit.
+ * @param {import('@/domain/ports/store.port').AdminStore} store - Store with insertAudit.
  * @returns {object} { record(entry) }.
  */
-function createAuditService(store) {
+function createAuditUseCase(store) {
   return {
     async record({ actor, action, ticketId, bookingId, eventId, nikMasked, details }) {
       return store.insertAudit({
@@ -23,4 +23,4 @@ function createAuditService(store) {
   };
 }
 
-module.exports = { createAuditService };
+module.exports = { createAuditUseCase };

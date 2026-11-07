@@ -1,5 +1,5 @@
 const express = require('express');
-const { wrapController } = require('@/middleware/async-handler');
+const { wrapController } = require('@/presentation/http/middleware/async-handler');
 
 /**
  * Creates the queue-admin router (J8 A / item 13). Admin-only.

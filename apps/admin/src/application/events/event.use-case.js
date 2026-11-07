@@ -1,41 +1,16 @@
-const { ApiError } = require('@/errors');
-const { CAP_TIERS } = require('./event.validation');
+const { ApiError } = require('@/domain/errors');
+const { CAP_TIERS, effectiveCap, totalStock } = require('@/domain/cap');
 
 /**
- * Effective CAP = min(chosen cap, infra cap) — CAP final v1 (1 Nov).
- * infra_cap is the load-test breaking point x 0.75. When infra_cap is
- * not set, the chosen cap is the effective cap.
- *
- * @param {number|null} cap - Chosen cap.
- * @param {number|null} infraCap - Infra cap.
- * @returns {number|null} Effective cap.
- */
-function effectiveCap(cap, infraCap) {
-  if (cap === null || cap === undefined) return null;
-  if (infraCap === null || infraCap === undefined) return cap;
-  return Math.min(cap, infraCap);
-}
-
-/**
- * Total stock of an event = sum of its category totals.
- *
- * @param {object} event - Event with categories.
- * @returns {number} Total stock.
- */
-function totalStock(event) {
-  return (event.categories || []).reduce((sum, category) => sum + category.total, 0);
-}
-
-/**
- * Admin event service (LLD-05 §5.1–§5.2). CAP lives in the event model
+ * Admin event use case (LLD-05 §5.1–§5.2). CAP lives in the event model
  * (Postgres), never in Valkey (model event, ADR-0022); core uses the
  * effective CAP to compute empty slots + publish empty-slot events.
  *
- * @param {object} store - Store (events, stats, audit).
- * @param {object} audit - Audit service.
+ * @param {import('@/domain/ports/store.port').AdminStore} store - Store (events, stats, audit).
+ * @param {object} audit - Audit use case.
  * @returns {object} Event operations.
  */
-function createEventService(store, audit) {
+function createEventUseCase(store, audit) {
   const capResponse = (event) => ({
     cap_tier: event.cap_tier,
     cap: event.cap,
@@ -130,4 +105,4 @@ function createEventService(store, audit) {
   };
 }
 
-module.exports = { createEventService, effectiveCap, totalStock };
+module.exports = { createEventUseCase, effectiveCap, totalStock };

@@ -1,13 +1,13 @@
-const { ApiError } = require('@/errors');
-const { queueStateSchema } = require('./queue.validation');
+const { ApiError } = require('@/domain/errors');
+const { queueStateSchema } = require('../validation/queue.validation');
 
 /**
  * Creates controllers for the queue-admin endpoint (J8 A / item 13).
  *
- * @param {object} queueService - Queue service.
+ * @param {object} queueUseCase - Queue use case.
  * @returns {object} Queue endpoint controllers.
  */
-function createQueueController(queueService) {
+function createQueueController(queueUseCase) {
   return {
     updateQueue: async (request, response) => {
       response.locals.skipResponseEnvelope = true;
@@ -17,7 +17,7 @@ function createQueueController(queueService) {
         stripUnknown: true
       });
       if (error) throw new ApiError('VALIDATION_FAILED', error.details.map((detail) => detail.message).join(', '));
-      const frontier = await queueService.updateQueue(request.params.eventId, value, request.admin);
+      const frontier = await queueUseCase.updateQueue(request.params.eventId, value, request.admin);
       response.status(200).json(frontier);
     }
   };

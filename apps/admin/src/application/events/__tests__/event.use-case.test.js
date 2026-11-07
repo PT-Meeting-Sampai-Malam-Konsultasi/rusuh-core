@@ -1,6 +1,6 @@
-const { createMemoryStore } = require('@/infrastructure/memory-store');
-const { createAuditService } = require('@/modules/audit/audit.service');
-const { createEventService, effectiveCap, totalStock } = require('@/modules/events/event.service');
+const { createMemoryStore } = require('@/infrastructure/persistence/memory-store');
+const { createAuditUseCase } = require('@/application/audit/audit.use-case');
+const { createEventUseCase, effectiveCap, totalStock } = require('@/application/events/event.use-case');
 
 const actor = { accountId: 'acc_admin_01', email: 'admin@rusuh.id', role: 'admin' };
 
@@ -27,13 +27,13 @@ describe('totalStock', () => {
   });
 });
 
-describe('createEventService', () => {
+describe('createEventUseCase', () => {
   let store;
   let service;
 
   beforeEach(() => {
     store = createMemoryStore();
-    service = createEventService(store, createAuditService(store));
+    service = createEventUseCase(store, createAuditUseCase(store));
   });
 
   describe('getCap / getStats', () => {
