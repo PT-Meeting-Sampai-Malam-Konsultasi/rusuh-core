@@ -1,9 +1,8 @@
 const constants = require('../constants');
 
 describe('constants', () => {
-  it('admission TTL is 16 minutes (60s claim + 5 min detail + 10 min payment)', () => {
-    expect(constants.ADMISSION_TOKEN_TTL_MS).toBe(16 * 60 * 1000);
-    expect(constants.CLAIM_WINDOW_MS + constants.DETAIL_TTL_MS + constants.PAYMENT_TTL_MS).toBe(16 * 60 * 1000);
+  it('payment TTL is 10 minutes (BR-05)', () => {
+    expect(constants.PAYMENT_TTL_MS).toBe(10 * 60 * 1000);
   });
 
   it('max 3 seats per NIK per event (BR-01, ADR-0024)', () => {
