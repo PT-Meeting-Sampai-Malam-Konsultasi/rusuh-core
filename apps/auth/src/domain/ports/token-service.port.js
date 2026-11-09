@@ -4,9 +4,6 @@
  * (Ed25519 account JWT via @rusuh/auth, Q43; opaque refresh, Q44).
  *
  * @typedef {object} TokenService
- * @property {function(): string} getKid - Current signing key id.
- * @property {function(): Map<string, object>} getPublicKeys - Public keys by kid.
- * @property {function(): boolean} isGeneratedKey - Whether the signing key is ephemeral (dev/test).
  * @property {function(string, string): {token: string, jti: string, exp: number, familyId: string}} signAccessToken - Signs an access JWT (15 min).
  * @property {function(string, function(string): Promise<boolean>): Promise<object>} verifyAccessToken - Verifies an access JWT (+ denylist check).
  * @property {function(): {token: string, tokenHash: string}} createRefreshToken - Generates an opaque refresh token.

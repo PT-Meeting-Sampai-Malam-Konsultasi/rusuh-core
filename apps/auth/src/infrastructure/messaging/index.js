@@ -19,4 +19,4 @@ function createMailer(config = {}) {
   return createMemoryMailer();
 }
 
-module.exports = { createMailer, createMemoryMailer, createSqsMailer };
+module.exports = { createMailer };

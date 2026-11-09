@@ -15,4 +15,4 @@ function createStore(config = {}) {
   return createMemoryStore();
 }
 
-module.exports = { createStore, createMemoryStore, createPostgresStore };
+module.exports = { createStore };

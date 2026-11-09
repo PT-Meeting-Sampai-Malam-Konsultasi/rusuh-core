@@ -13,4 +13,4 @@ function createDenylist(config = {}) {
   return createMemoryDenylist();
 }
 
-module.exports = { createDenylist, createMemoryDenylist, createValkeyDenylist };
+module.exports = { createDenylist };

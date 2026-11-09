@@ -27,13 +27,11 @@ function createTokenService(config = {}) {
   const kid = config.jwtKid || defaultKid;
 
   let privateJwk;
-  let generated = false;
   if (config.jwtPrivateKeyJwk) {
     privateJwk = JSON.parse(config.jwtPrivateKeyJwk);
   } else {
     const { privateKey } = crypto.generateKeyPairSync('ed25519');
     privateJwk = privateKey.export({ format: 'jwk' });
-    generated = true;
     logger.info(
       'AUTH_JWT_PRIVATE_KEY_JWK is not set; generated an ephemeral Ed25519 keypair. ' +
         'Tokens will not survive a restart. Set the key in production.'
@@ -51,10 +49,6 @@ function createTokenService(config = {}) {
   }
 
   return {
-    getKid: () => kid,
-    getPublicKeys: () => publicKeys,
-    isGeneratedKey: () => generated,
-
     /**
      * Signs an access JWT (15 min, claims sub/iat/exp/jti/kid, NO event).
      *
