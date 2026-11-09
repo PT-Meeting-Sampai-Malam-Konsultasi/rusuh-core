@@ -294,9 +294,10 @@ function createBookingUseCase({ store, stock, payment, eventBus, nikEncryptionKe
       }
 
       const items = luaItems(booking);
+      // checkAndHold returns the final API error code directly (no mapping layer).
       const held = await stock.checkAndHold(booking.eventId, items);
       if (!held.ok) {
-        if (held.code === 'STOK_KURANG') {
+        if (held.code === 'CATEGORY_SOLD_OUT') {
           throw problemError('CATEGORY_SOLD_OUT', 'Pick another category.', { categoryId: held.categoryId });
         }
         const attendee = booking.attendees.find((a) => a.nikHmac === held.nikHmac);

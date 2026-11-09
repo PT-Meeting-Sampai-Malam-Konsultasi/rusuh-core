@@ -77,7 +77,7 @@ describe('RedisStock (live Valkey adapter, fake client)', () => {
     await expect(stock.getAvailable('evt_1', 'cat_missing')).resolves.toBe(0);
   });
 
-  it('checkAndHold maps the Lua result to ok / STOK_KURANG / KUOTA_NIK', async () => {
+  it('checkAndHold passes the Lua result through: ok / CATEGORY_SOLD_OUT / NIK_SEAT_TAKEN', async () => {
     const client = fakeClient();
     const stock = new RedisStock(client);
     const items = [{ categoryId: 'cat_1', nikHmacs: ['hmac_1'] }];
@@ -85,17 +85,17 @@ describe('RedisStock (live Valkey adapter, fake client)', () => {
     client.__checkAndHold = async () => [1];
     await expect(stock.checkAndHold('evt_1', items)).resolves.toEqual({ ok: true });
 
-    client.__checkAndHold = async () => [0, 'STOK_KURANG', 'cat_1'];
+    client.__checkAndHold = async () => [0, 'CATEGORY_SOLD_OUT', 'cat_1'];
     await expect(stock.checkAndHold('evt_1', items)).resolves.toEqual({
       ok: false,
-      code: 'STOK_KURANG',
+      code: 'CATEGORY_SOLD_OUT',
       categoryId: 'cat_1'
     });
 
-    client.__checkAndHold = async () => [0, 'KUOTA_NIK', 'hmac_1'];
+    client.__checkAndHold = async () => [0, 'NIK_SEAT_TAKEN', 'hmac_1'];
     await expect(stock.checkAndHold('evt_1', items)).resolves.toEqual({
       ok: false,
-      code: 'KUOTA_NIK',
+      code: 'NIK_SEAT_TAKEN',
       nikHmac: 'hmac_1'
     });
     expect(client.checkAndHold).toHaveBeenCalledWith(JSON.stringify(items), 3, 'evt_1');

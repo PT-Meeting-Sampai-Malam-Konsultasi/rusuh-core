@@ -21,10 +21,11 @@ const MAX_SEATS_PER_NIK = 3;
 
 /**
  * Atomic check-and-hold (LLD-02 §6.1). All-or-nothing:
- *  per category: available >= qty, else STOK_KURANG;
- *  per NIK (qty aggregated across categories): counter + qty <= 3, else KUOTA_NIK.
+ *  per category: available >= qty, else CATEGORY_SOLD_OUT;
+ *  per NIK (qty aggregated across categories): counter + qty <= 3, else NIK_SEAT_TAKEN.
  * On success: DECR available, INCR held, INCR nik counters.
- * Returns { ok: true } or { ok: false, code: 'STOK_KURANG'|'KUOTA_NIK', categoryId?, nikHmac? }.
+ * The Lua returns the final API error codes directly (no mapping layer):
+ * { ok: true } or { ok: false, code: 'CATEGORY_SOLD_OUT'|'NIK_SEAT_TAKEN', categoryId?, nikHmac? }.
  */
 const LUA_CHECK_AND_HOLD = `
 local items = cjson.decode(ARGV[1])
@@ -34,7 +35,7 @@ local eventId = ARGV[3]
 for _, item in ipairs(items) do
   local available = tonumber(redis.call('GET', 'stock:' .. eventId .. ':' .. item.category_id .. ':available') or '0')
   if available < item.qty then
-    return {0, 'STOK_KURANG', item.category_id}
+    return {0, 'CATEGORY_SOLD_OUT', item.category_id}
   end
 end
 -- 2. quota per NIK (qty aggregated across categories)
@@ -47,7 +48,7 @@ end
 for nikHmac, qty in pairs(perNik) do
   local counter = tonumber(redis.call('GET', 'nik:' .. eventId .. ':' .. nikHmac) or '0')
   if counter + qty > maxPerNik then
-    return {0, 'KUOTA_NIK', nikHmac}
+    return {0, 'NIK_SEAT_TAKEN', nikHmac}
   end
 end
 -- 3. all pass: apply
@@ -137,7 +138,7 @@ class MemoryStock {
     const short = items.find(
       (item) => (this.counters.get(stockKey(eventId, item.categoryId, 'available')) || 0) < item.qty
     );
-    if (short) return { ok: false, code: 'STOK_KURANG', categoryId: short.categoryId };
+    if (short) return { ok: false, code: 'CATEGORY_SOLD_OUT', categoryId: short.categoryId };
     const perNik = new Map();
     items.forEach((item) => {
       item.nikHmacs.forEach((nikHmac) => perNik.set(nikHmac, (perNik.get(nikHmac) || 0) + item.qty));
@@ -145,7 +146,7 @@ class MemoryStock {
     const over = [...perNik].find(
       ([nikHmac, qty]) => (this.counters.get(nikKey(eventId, nikHmac)) || 0) + qty > MAX_SEATS_PER_NIK
     );
-    if (over) return { ok: false, code: 'KUOTA_NIK', nikHmac: over[0] };
+    if (over) return { ok: false, code: 'NIK_SEAT_TAKEN', nikHmac: over[0] };
     items.forEach((item) => {
       const availableKey = stockKey(eventId, item.categoryId, 'available');
       const heldKey = stockKey(eventId, item.categoryId, 'held');
@@ -242,8 +243,9 @@ class RedisStock {
   async checkAndHold(eventId, items) {
     const result = await this.client.checkAndHold(JSON.stringify(items), MAX_SEATS_PER_NIK, eventId);
     if (result[0] === 1) return { ok: true };
-    if (result[1] === 'STOK_KURANG') return { ok: false, code: 'STOK_KURANG', categoryId: result[2] };
-    return { ok: false, code: 'KUOTA_NIK', nikHmac: result[2] };
+    // The Lua returns the final API error code directly; pass it through unchanged.
+    if (result[1] === 'CATEGORY_SOLD_OUT') return { ok: false, code: 'CATEGORY_SOLD_OUT', categoryId: result[2] };
+    return { ok: false, code: 'NIK_SEAT_TAKEN', nikHmac: result[2] };
   }
 
   async release(eventId, items) {

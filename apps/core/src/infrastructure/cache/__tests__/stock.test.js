@@ -21,17 +21,17 @@ describe('MemoryStock (Lua semantics, D8)', () => {
     expect(await stock.getNikCount(eventId, nikHmac)).toBe(2);
   });
 
-  it('rejects a hold that exceeds available stock (STOK_KURANG)', async () => {
+  it('rejects a hold that exceeds available stock (CATEGORY_SOLD_OUT)', async () => {
     const result = await stock.checkAndHold(eventId, [{ categoryId, qty: 501, nikHmacs: [nikHmac] }]);
-    expect(result).toEqual({ ok: false, code: 'STOK_KURANG', categoryId });
+    expect(result).toEqual({ ok: false, code: 'CATEGORY_SOLD_OUT', categoryId });
     expect(await stock.getAvailable(eventId, categoryId)).toBe(500);
     expect(await stock.getNikCount(eventId, nikHmac)).toBe(0);
   });
 
-  it('rejects a hold that would exceed the 3-seat NIK quota (KUOTA_NIK)', async () => {
+  it('rejects a hold that would exceed the 3-seat NIK quota (NIK_SEAT_TAKEN)', async () => {
     await stock.checkAndHold(eventId, [{ categoryId, qty: 2, nikHmacs: [nikHmac] }]);
     const result = await stock.checkAndHold(eventId, [{ categoryId, qty: 2, nikHmacs: [nikHmac] }]);
-    expect(result).toEqual({ ok: false, code: 'KUOTA_NIK', nikHmac });
+    expect(result).toEqual({ ok: false, code: 'NIK_SEAT_TAKEN', nikHmac });
     // The failed hold leaves the state untouched.
     expect(await stock.getAvailable(eventId, categoryId)).toBe(498);
     expect(await stock.getNikCount(eventId, nikHmac)).toBe(2);
@@ -41,7 +41,7 @@ describe('MemoryStock (Lua semantics, D8)', () => {
     await stock.checkAndHold(eventId, [{ categoryId, qty: 2, nikHmacs: ['nik-a', 'nik-b'] }]);
     const result = await stock.checkAndHold(eventId, [{ categoryId, qty: 2, nikHmacs: ['nik-a', 'nik-a'] }]);
     expect(result.ok).toBe(false);
-    expect(result.code).toBe('KUOTA_NIK');
+    expect(result.code).toBe('NIK_SEAT_TAKEN');
     expect(result.nikHmac).toBe('nik-a');
   });
 
@@ -83,8 +83,8 @@ describe('MemoryStock (Lua semantics, D8)', () => {
   });
 
   it('the Lua scripts encode the same checks as the in-memory adapter', () => {
-    expect(LUA_CHECK_AND_HOLD).toContain('STOK_KURANG');
-    expect(LUA_CHECK_AND_HOLD).toContain('KUOTA_NIK');
+    expect(LUA_CHECK_AND_HOLD).toContain('CATEGORY_SOLD_OUT');
+    expect(LUA_CHECK_AND_HOLD).toContain('NIK_SEAT_TAKEN');
     expect(LUA_CHECK_AND_HOLD).toContain('cjson.decode');
     expect(LUA_RELEASE).toContain('DECRBY');
     expect(LUA_SETTLE).toContain('sold');
