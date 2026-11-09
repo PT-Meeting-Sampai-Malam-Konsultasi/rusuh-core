@@ -7,7 +7,7 @@ HTTP notification webhook + Get Status API.
 - Port: **8083** (default).
 - Stack: Express + CommonJS, same boilerplate as rusuh-mock.
 - Public endpoint (the ONLY one in this module):
-  `POST /v1/webhooks/midtrans` — Midtrans HTTP notification.
+  `POST /v1/payment/webhooks/midtrans` — Midtrans HTTP notification.
 - Internal functions (used by core-module via internal call; no extra
   public routes): `createSnapTransaction`, `confirmViaGetStatus`,
   `expireOrder` (see `src/application/`).

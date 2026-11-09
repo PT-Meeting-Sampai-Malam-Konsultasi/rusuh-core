@@ -63,10 +63,10 @@ async function buildTestApp({ getStatusImpl, coreImpl, webhookUseCase } = {}) {
   return { app, store, midtransClient, coreClient };
 }
 
-describe('POST /v1/webhooks/midtrans', () => {
+describe('POST /v1/payment/webhooks/midtrans', () => {
   it('accepts a valid settlement notification (200) and notifies core', async () => {
     const { app, coreClient, midtransClient } = await buildTestApp();
-    const response = await request(app).post('/v1/webhooks/midtrans').send(notification());
+    const response = await request(app).post('/v1/payment/webhooks/midtrans').send(notification());
     expect(response.status).toBe(200);
     expect(midtransClient.getStatus).toHaveBeenCalledWith(ORDER_ID);
     expect(coreClient.notifyPaymentResult).toHaveBeenCalledTimes(1);
@@ -76,7 +76,7 @@ describe('POST /v1/webhooks/midtrans', () => {
     const { app, coreClient, midtransClient } = await buildTestApp();
     const body = notification();
     body.signature_key = '0'.repeat(128);
-    const response = await request(app).post('/v1/webhooks/midtrans').send(body);
+    const response = await request(app).post('/v1/payment/webhooks/midtrans').send(body);
     expect(response.status).toBe(200);
     expect(midtransClient.getStatus).not.toHaveBeenCalled();
     expect(coreClient.notifyPaymentResult).not.toHaveBeenCalled();
@@ -84,8 +84,8 @@ describe('POST /v1/webhooks/midtrans', () => {
 
   it('answers 200 for a duplicate notification', async () => {
     const { app, coreClient } = await buildTestApp();
-    await request(app).post('/v1/webhooks/midtrans').send(notification());
-    const second = await request(app).post('/v1/webhooks/midtrans').send(notification());
+    await request(app).post('/v1/payment/webhooks/midtrans').send(notification());
+    const second = await request(app).post('/v1/payment/webhooks/midtrans').send(notification());
     expect(second.status).toBe(200);
     expect(coreClient.notifyPaymentResult).toHaveBeenCalledTimes(1);
   });
@@ -93,7 +93,7 @@ describe('POST /v1/webhooks/midtrans', () => {
   it('answers 200 for malformed JSON (Q45: invalid -> 200, no state change)', async () => {
     const { app, coreClient } = await buildTestApp();
     const response = await request(app)
-      .post('/v1/webhooks/midtrans')
+      .post('/v1/payment/webhooks/midtrans')
       .set('Content-Type', 'application/json')
       .send('{"order_id": ');
     expect(response.status).toBe(200);
@@ -104,7 +104,7 @@ describe('POST /v1/webhooks/midtrans', () => {
     const { app, coreClient } = await buildTestApp();
     const body = notification();
     body.padding = 'x'.repeat(70000);
-    const response = await request(app).post('/v1/webhooks/midtrans').send(body);
+    const response = await request(app).post('/v1/payment/webhooks/midtrans').send(body);
     expect(response.status).toBe(200);
     expect(coreClient.notifyPaymentResult).not.toHaveBeenCalled();
   });
@@ -114,7 +114,7 @@ describe('POST /v1/webhooks/midtrans', () => {
     midtransClient.getStatus.mockRejectedValue(
       Object.assign(new Error('Midtrans 500'), { name: 'MidtransError', status: 500 })
     );
-    const response = await request(app).post('/v1/webhooks/midtrans').send(notification());
+    const response = await request(app).post('/v1/payment/webhooks/midtrans').send(notification());
     expect(response.status).toBe(500);
   });
 
@@ -124,7 +124,7 @@ describe('POST /v1/webhooks/midtrans', () => {
         throw new Error('core unreachable');
       }
     });
-    const response = await request(app).post('/v1/webhooks/midtrans').send(notification());
+    const response = await request(app).post('/v1/payment/webhooks/midtrans').send(notification());
     expect(response.status).toBe(500);
     expect(coreClient.notifyPaymentResult).toHaveBeenCalledTimes(3);
   });
@@ -137,7 +137,7 @@ describe('POST /v1/webhooks/midtrans', () => {
         }
       }
     });
-    const response = await request(app).post('/v1/webhooks/midtrans').send(notification());
+    const response = await request(app).post('/v1/payment/webhooks/midtrans').send(notification());
     expect(response.status).toBe(500);
   });
 
@@ -149,8 +149,14 @@ describe('POST /v1/webhooks/midtrans', () => {
 
   it('rejects non-POST methods (405/404, POST-only per Q45)', async () => {
     const { app } = await buildTestApp();
-    const response = await request(app).get('/v1/webhooks/midtrans');
+    const response = await request(app).get('/v1/payment/webhooks/midtrans');
     expect([404, 405]).toContain(response.status);
+  });
+
+  it('old path /v1/webhooks/midtrans now 404s (moved to /v1/payment/*)', async () => {
+    const { app } = await buildTestApp();
+    const response = await request(app).post('/v1/webhooks/midtrans').send(notification());
+    expect(response.status).toBe(404);
   });
 
   it('health endpoints still work', async () => {
