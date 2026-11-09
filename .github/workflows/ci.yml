@@ -1,0 +1,121 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    strategy:
+      matrix:
+        include:
+          - app: auth
+            package: '@rusuh/auth-service'
+            image: rusuh-auth
+            ecs-service: rusuh-demo-auth
+            ecs-task-family: rusuh-demo-auth
+            ecs-container: auth
+          - app: core
+            package: '@rusuh/core-service'
+            image: rusuh-core
+            ecs-service: rusuh-demo-core
+            ecs-task-family: rusuh-demo-core
+            ecs-container: core
+          - app: payment
+            package: '@rusuh/payment-service'
+            image: rusuh-payment
+            ecs-service: rusuh-demo-payment
+            ecs-task-family: rusuh-demo-payment
+            ecs-container: payment
+          - app: notification
+            package: '@rusuh/notification-service'
+            image: rusuh-notification
+            ecs-service: rusuh-demo-notification
+            ecs-task-family: rusuh-demo-notification
+            ecs-container: notification
+          - app: officer
+            package: '@rusuh/officer-service'
+            image: rusuh-officer
+            ecs-service: rusuh-demo-officer
+            ecs-task-family: rusuh-demo-officer
+            ecs-container: officer
+          - app: admin
+            package: '@rusuh/admin-service'
+            image: rusuh-admin
+            ecs-service: rusuh-demo-admin
+            ecs-task-family: rusuh-demo-admin
+            ecs-container: admin
+    uses: PT-Meeting-Sampai-Malam-Konsultasi/rusuh-infra/.github/workflows/backend-ci.yml@v1
+    permissions:
+      contents: read
+      packages: write
+    with:
+      service: ${{ matrix.image }}
+      runtime: node
+      runtime-version-file: .nvmrc
+      working-directory: .
+      setup: npm ci
+      lint: npm run lint --workspace=${{ matrix.package }}
+      test: npm test --workspace=${{ matrix.package }}
+      vuln: npm audit --audit-level=high
+      dockerfile: apps/${{ matrix.app }}/Dockerfile
+      context: .
+
+  cd:
+    needs: ci
+    if: github.ref_type == 'tag'
+    strategy:
+      matrix:
+        include:
+          - app: auth
+            package: '@rusuh/auth-service'
+            image: rusuh-auth
+            ecs-service: rusuh-demo-auth
+            ecs-task-family: rusuh-demo-auth
+            ecs-container: auth
+          - app: core
+            package: '@rusuh/core-service'
+            image: rusuh-core
+            ecs-service: rusuh-demo-core
+            ecs-task-family: rusuh-demo-core
+            ecs-container: core
+          - app: payment
+            package: '@rusuh/payment-service'
+            image: rusuh-payment
+            ecs-service: rusuh-demo-payment
+            ecs-task-family: rusuh-demo-payment
+            ecs-container: payment
+          - app: notification
+            package: '@rusuh/notification-service'
+            image: rusuh-notification
+            ecs-service: rusuh-demo-notification
+            ecs-task-family: rusuh-demo-notification
+            ecs-container: notification
+          - app: officer
+            package: '@rusuh/officer-service'
+            image: rusuh-officer
+            ecs-service: rusuh-demo-officer
+            ecs-task-family: rusuh-demo-officer
+            ecs-container: officer
+          - app: admin
+            package: '@rusuh/admin-service'
+            image: rusuh-admin
+            ecs-service: rusuh-demo-admin
+            ecs-task-family: rusuh-demo-admin
+            ecs-container: admin
+    uses: PT-Meeting-Sampai-Malam-Konsultasi/rusuh-infra/.github/workflows/backend-cd.yml@v1
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+    with:
+      service: ${{ matrix.image }}
+      environment: production
+      ecs-service: ${{ matrix.ecs-service }}
+      ecs-task-family: ${{ matrix.ecs-task-family }}
+      ecs-container: ${{ matrix.ecs-container }}
