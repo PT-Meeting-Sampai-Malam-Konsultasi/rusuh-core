@@ -6,10 +6,10 @@ const { ERROR_CODES, problem } = require('@rusuh/contracts');
  * contracts package is shared across the monorepo.
  */
 const EXTRA_CODES = Object.freeze({
-  VALIDATION_FAILED: { status: 400, title: 'Data tidak valid' },
-  ACCOUNT_HAS_ACTIVE_BOOKING: { status: 409, title: 'Anda masih punya pesanan aktif' },
-  BOOKING_NOT_PAID: { status: 409, title: 'Pesanan belum dibayar' },
-  RATE_LIMITED: { status: 429, title: 'Terlalu banyak permintaan' },
+  VALIDATION_FAILED: { status: 400, title: 'Invalid data' },
+  ACCOUNT_HAS_ACTIVE_BOOKING: { status: 409, title: 'You already have an active booking' },
+  BOOKING_NOT_PAID: { status: 409, title: 'Booking not paid yet' },
+  RATE_LIMITED: { status: 429, title: 'Too many requests' },
   INTERNAL_ERROR: { status: 500, title: 'Internal Server Error' }
 });
 
