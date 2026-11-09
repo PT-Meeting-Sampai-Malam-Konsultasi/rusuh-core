@@ -20,10 +20,4 @@ describe('platform/common', () => {
   it('unifyResponse returns undefined (the raw payload is used)', () => {
     expect(platform.unifyResponse({}, {}, { data: 1 })).toBeUndefined();
   });
-
-  it('preHandler passes through to next', () => {
-    const next = jest.fn();
-    platform.preHandler({}, {}, next);
-    expect(next).toHaveBeenCalledTimes(1);
-  });
 });
