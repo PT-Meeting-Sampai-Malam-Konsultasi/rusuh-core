@@ -130,7 +130,6 @@ function createConsumerUseCase({
     name,
     queueUrl,
     isRunning: () => running,
-    inFlight: () => inFlight,
 
     start: () => {
       if (running) return;
@@ -154,4 +153,4 @@ function createConsumerUseCase({
   };
 }
 
-module.exports = { createConsumerUseCase, DELETE_OUTCOMES };
+module.exports = { createConsumerUseCase };

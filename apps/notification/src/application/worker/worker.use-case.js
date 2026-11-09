@@ -76,8 +76,6 @@ function createWorkerUseCase({ config, sqs, s3, pool, logStore, sender, logger =
 
   return {
     consumers,
-    logStore,
-    processor,
 
     isHealthy: () => !started || consumers.every((consumer) => consumer.isRunning()),
 

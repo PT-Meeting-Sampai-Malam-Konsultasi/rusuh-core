@@ -160,4 +160,4 @@ function createMemoryEmailLogStore({ staleMinutes = 5, now = () => Date.now() } 
   };
 }
 
-module.exports = { createPostgresEmailLogStore, createMemoryEmailLogStore, decideClaim, EMAIL_LOG_DDL };
+module.exports = { createPostgresEmailLogStore, createMemoryEmailLogStore, decideClaim };

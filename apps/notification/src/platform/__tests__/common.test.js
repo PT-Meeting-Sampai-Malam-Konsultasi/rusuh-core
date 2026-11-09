@@ -23,10 +23,4 @@ describe('platform/common', () => {
     expect(platform.logRequest({})).toEqual({});
     expect(platform.unifyResponse({}, {}, {})).toBeUndefined();
   });
-
-  it('preHandler passes through to next', () => {
-    const next = jest.fn();
-    platform.preHandler({}, {}, next);
-    expect(next).toHaveBeenCalledTimes(1);
-  });
 });

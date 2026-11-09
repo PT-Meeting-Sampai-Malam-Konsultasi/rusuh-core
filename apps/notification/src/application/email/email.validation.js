@@ -81,4 +81,4 @@ function validateJob(job) {
   return { ...envelope, variables };
 }
 
-module.exports = { validateJob, envelopeSchema };
+module.exports = { validateJob };
