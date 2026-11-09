@@ -144,14 +144,6 @@ describe('booking use case (state transitions)', () => {
     expect(deps.auth.requireAccount).toBeDefined();
     expect(deps.sweeper).toBeDefined();
   });
-
-  it('reconcileOrphans is a no-op placeholder until the Valkey scan is wired', async () => {
-    const { useCase } = buildUseCase();
-    await expect(useCase.reconcileOrphans()).resolves.toEqual({
-      released: 0,
-      note: 'Valkey scan not wired (follow-up)'
-    });
-  });
 });
 
 describe('booking use case (error paths)', () => {

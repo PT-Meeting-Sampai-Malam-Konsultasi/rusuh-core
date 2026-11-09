@@ -1,7 +1,10 @@
 /**
  * Dukcapil verification client (rusuh-mock contract).
  *  POST {baseUrl}/api/v1/verifications { nik } -> 200 { data: { nik, valid, reason } }
- *  Malformed NIK -> 400. Not in dataset -> valid:false, reason NIK_NOT_FOUND.
+ * Format-only verification: the mock checks the NIK format (16 digits,
+ * valid birth date, sequence != 0000); it does NOT look the NIK up in a
+ * dataset. Malformed NIK -> 400 (or valid:false). A format-valid NIK is
+ * valid:true, whatever its value.
  * Timeout 2 s (LLD-02 §5.1). Circuit breaker: after N consecutive failures
  * the circuit opens for a cooldown and verify() throws DUKCAPIL_UNAVAILABLE
  * without calling the service (503, LLD-02 §5.1).

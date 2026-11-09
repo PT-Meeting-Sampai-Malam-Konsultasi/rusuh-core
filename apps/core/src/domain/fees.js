@@ -78,4 +78,4 @@ function computePrice(lines, fees) {
   };
 }
 
-module.exports = { computePrice, money };
+module.exports = { computePrice };

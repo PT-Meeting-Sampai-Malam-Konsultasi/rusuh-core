@@ -463,21 +463,6 @@ function createBookingUseCase({ store, stock, payment, eventBus, nikEncryptionKe
         processed: results.filter(Boolean).length,
         skipped: results.filter((result) => !result).length
       };
-    },
-
-    /**
-     * Reconciler (LLD-02 §10, Usulan): releases orphaned holds (a hold in
-     * Valkey with no matching PAYMENT_PENDING booking) and corrects the
-     * category counters from the durable booking states.
-     * v1 scope: orphaned holds only (counter correction needs the full
-     * booking scan; tracked as a follow-up).
-     */
-    async reconcileOrphans() {
-      // Orphaned hold = a booking that was SELECTION->PAYMENT_PENDING in Valkey
-      // but never reached the DB (see §6.2). The sweeper's expireDue covers
-      // the common case; this is a no-op placeholder until the Valkey scan
-      // (keyspace) is wired. Kept explicit so the gap is visible.
-      return { released: 0, note: 'Valkey scan not wired (follow-up)' };
     }
   };
 }

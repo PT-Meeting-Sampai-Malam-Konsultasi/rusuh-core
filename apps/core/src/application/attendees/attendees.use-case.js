@@ -9,7 +9,7 @@ const MAX_SEATS_PER_NIK = 3;
 /**
  * Attendee validation (LLD-02 §5.1, contract validateAttendee).
  * Checks, in order: 16-digit format + structure, not repeated in this
- * order, Dukcapil mock NIK-only (format + existence, 2 s timeout), and
+ * order, Dukcapil mock format-only verification (2 s timeout), and
  * this NIK holds < 3 seats for this event (ADR-0024).
  * A negative Dukcapil verdict BLOCKS the purchase (gating, 6 Nov item 4).
  * Success returns a short-lived validationToken (+ nikMasked) for the hold.
@@ -57,7 +57,7 @@ function createAttendeesUseCase({ store, stock, dukcapil, nikHmacKey, nikEncrypt
         throw problemError('DUPLICATE_NIK', 'Each attendee in an order needs a different NIK.');
       }
 
-      // Dukcapil mock, NIK-only (format + existence). Negative verdict BLOCKS.
+      // Dukcapil mock, format-only verification. Negative verdict BLOCKS.
       const verdict = await dukcapil.verify(normalized);
       if (!verdict.valid) {
         throw problemError('NIK_INVALID', 'The NIK format is wrong, or the NIK was not found.');

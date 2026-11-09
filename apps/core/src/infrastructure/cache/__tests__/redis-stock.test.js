@@ -63,20 +63,16 @@ describe('RedisStock (live Valkey adapter, fake client)', () => {
     expect(client.defineCommand).toHaveBeenCalledWith('settleHold', expect.objectContaining({ numberOfKeys: 0 }));
   });
 
-  it('reads the counters (available / held / sold / NIK) via the right keys', async () => {
+  it('reads the counters (available / NIK) via the right keys', async () => {
     const client = fakeClient({
       __get: (key) => {
         if (key === stockKey('evt_1', 'cat_1', 'available')) return '7';
-        if (key === stockKey('evt_1', 'cat_1', 'held')) return '2';
-        if (key === stockKey('evt_1', 'cat_1', 'sold')) return '1';
         if (key === nikKey('evt_1', 'hmac_1')) return '3';
         return null;
       }
     });
     const stock = new RedisStock(client);
     await expect(stock.getAvailable('evt_1', 'cat_1')).resolves.toBe(7);
-    await expect(stock.getHeld('evt_1', 'cat_1')).resolves.toBe(2);
-    await expect(stock.getSold('evt_1', 'cat_1')).resolves.toBe(1);
     await expect(stock.getNikCount('evt_1', 'hmac_1')).resolves.toBe(3);
     await expect(stock.getAvailable('evt_1', 'cat_missing')).resolves.toBe(0);
   });
@@ -115,7 +111,7 @@ describe('RedisStock (live Valkey adapter, fake client)', () => {
     expect(client.settleHold).toHaveBeenCalledWith(JSON.stringify(items), 'evt_1');
   });
 
-  it('stores, reads and deletes an admission entry', async () => {
+  it('stores and reads an admission entry', async () => {
     const client = fakeClient({
       __get: (key) => (key === admissionKey('adm_1') ? JSON.stringify({ user_id: 'acc_1' }) : null)
     });
@@ -125,8 +121,6 @@ describe('RedisStock (live Valkey adapter, fake client)', () => {
     expect(client.set).toHaveBeenCalledWith(admissionKey('adm_1'), JSON.stringify(entry), 'PX', 960000);
     await expect(stock.getAdmission('adm_1')).resolves.toEqual({ user_id: 'acc_1' });
     await expect(stock.getAdmission('adm_missing')).resolves.toBeNull();
-    await stock.deleteAdmission('adm_1');
-    expect(client.del).toHaveBeenCalledWith(admissionKey('adm_1'), `${admissionKey('adm_1')}:validated`);
   });
 
   it('tracks validated NIKs and copies the admission TTL onto the set', async () => {
@@ -148,11 +142,9 @@ describe('RedisStock (live Valkey adapter, fake client)', () => {
     expect(client.pexpire).not.toHaveBeenCalled();
   });
 
-  it('denylists a jti and reads it back', async () => {
+  it('isDenied reads the denylist key (the write side lives in the auth-module; core only reads)', async () => {
     const client = fakeClient({ __exists: () => 1 });
     const stock = new RedisStock(client);
-    await stock.deny('jti-1', 60000);
-    expect(client.set).toHaveBeenCalledWith('denylist:jti-1', '1', 'PX', 60000);
     await expect(stock.isDenied('jti-1')).resolves.toBe(true);
     const client2 = fakeClient({ __exists: () => 0 });
     const stock2 = new RedisStock(client2);

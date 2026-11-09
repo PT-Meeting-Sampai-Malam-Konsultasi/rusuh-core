@@ -27,7 +27,9 @@ describe('container (composition root)', () => {
   it('isDenied reflects the stock denylist', async () => {
     const deps = createDefaultDeps(baseConfig());
     expect(await deps.isDenied('jti-1')).toBe(false);
-    await deps.stock.deny('jti-1', 60000);
+    // Seed the denylist the way the shared Valkey key layout does
+    // (the write side lives in the auth-module; core only reads).
+    deps.stock.counters.set('denylist:jti-1', 1);
     expect(await deps.isDenied('jti-1')).toBe(true);
   });
 

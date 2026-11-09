@@ -122,14 +122,6 @@ class MemoryStock {
     return this.counters.get(stockKey(eventId, categoryId, 'available')) || 0;
   }
 
-  async getHeld(eventId, categoryId) {
-    return this.counters.get(stockKey(eventId, categoryId, 'held')) || 0;
-  }
-
-  async getSold(eventId, categoryId) {
-    return this.counters.get(stockKey(eventId, categoryId, 'sold')) || 0;
-  }
-
   async getNikCount(eventId, nikHmac) {
     return this.counters.get(nikKey(eventId, nikHmac)) || 0;
   }
@@ -207,11 +199,6 @@ class MemoryStock {
     return record.entry;
   }
 
-  async deleteAdmission(token) {
-    this.admissions.delete(token);
-    this.validated.delete(token);
-  }
-
   async addValidatedNik(token, nikHmac) {
     if (!this.validated.has(token)) this.validated.set(token, new Set());
     this.validated.get(token).add(nikHmac);
@@ -223,11 +210,6 @@ class MemoryStock {
 
   async isDenied(jti) {
     return this.counters.has(`denylist:${jti}`);
-  }
-
-  async deny(jti, ttlMs) {
-    this.counters.set(`denylist:${jti}`, 1);
-    if (ttlMs > 0) setTimeout(() => this.counters.delete(`denylist:${jti}`), ttlMs).unref();
   }
 
   async close() {
@@ -251,14 +233,6 @@ class RedisStock {
 
   async getAvailable(eventId, categoryId) {
     return Number(await this.client.get(stockKey(eventId, categoryId, 'available'))) || 0;
-  }
-
-  async getHeld(eventId, categoryId) {
-    return Number(await this.client.get(stockKey(eventId, categoryId, 'held'))) || 0;
-  }
-
-  async getSold(eventId, categoryId) {
-    return Number(await this.client.get(stockKey(eventId, categoryId, 'sold'))) || 0;
   }
 
   async getNikCount(eventId, nikHmac) {
@@ -291,10 +265,6 @@ class RedisStock {
     return raw ? JSON.parse(raw) : null;
   }
 
-  async deleteAdmission(token) {
-    await this.client.del(admissionKey(token), `${admissionKey(token)}:validated`);
-  }
-
   async addValidatedNik(token, nikHmac) {
     const key = `${admissionKey(token)}:validated`;
     await this.client.sadd(key, nikHmac);
@@ -308,10 +278,6 @@ class RedisStock {
 
   async isDenied(jti) {
     return (await this.client.exists(`denylist:${jti}`)) === 1;
-  }
-
-  async deny(jti, ttlMs) {
-    await this.client.set(`denylist:${jti}`, '1', 'PX', ttlMs);
   }
 
   async close() {

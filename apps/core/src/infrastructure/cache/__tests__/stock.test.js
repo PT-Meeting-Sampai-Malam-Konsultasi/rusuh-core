@@ -14,11 +14,10 @@ describe('MemoryStock (Lua semantics, D8)', () => {
     expect(await stock.getAvailable(eventId, categoryId)).toBe(500);
   });
 
-  it('holds atomically: DECR available, INCR held, INCR NIK counter', async () => {
+  it('holds atomically: DECR available, INCR NIK counter', async () => {
     const result = await stock.checkAndHold(eventId, [{ categoryId, qty: 2, nikHmacs: [nikHmac] }]);
     expect(result).toEqual({ ok: true });
     expect(await stock.getAvailable(eventId, categoryId)).toBe(498);
-    expect(await stock.getHeld(eventId, categoryId)).toBe(2);
     expect(await stock.getNikCount(eventId, nikHmac)).toBe(2);
   });
 
@@ -46,20 +45,17 @@ describe('MemoryStock (Lua semantics, D8)', () => {
     expect(result.nikHmac).toBe('nik-a');
   });
 
-  it('releases a hold: INCR available, DECR held, DECR NIK counter', async () => {
+  it('releases a hold: INCR available, DECR NIK counter', async () => {
     await stock.checkAndHold(eventId, [{ categoryId, qty: 3, nikHmacs: [nikHmac] }]);
     await stock.release(eventId, [{ categoryId, qty: 3, nikHmacs: [nikHmac] }]);
     expect(await stock.getAvailable(eventId, categoryId)).toBe(500);
-    expect(await stock.getHeld(eventId, categoryId)).toBe(0);
     expect(await stock.getNikCount(eventId, nikHmac)).toBe(0);
   });
 
-  it('settles a hold: DECR held, INCR sold, NIK counter stays (D8)', async () => {
+  it('settles a hold: DECR held, NIK counter stays (D8)', async () => {
     await stock.checkAndHold(eventId, [{ categoryId, qty: 3, nikHmacs: [nikHmac] }]);
     await stock.settle(eventId, [{ categoryId, qty: 3, nikHmacs: [nikHmac] }]);
     expect(await stock.getAvailable(eventId, categoryId)).toBe(497);
-    expect(await stock.getHeld(eventId, categoryId)).toBe(0);
-    expect(await stock.getSold(eventId, categoryId)).toBe(3);
     expect(await stock.getNikCount(eventId, nikHmac)).toBe(3);
   });
 
@@ -73,9 +69,10 @@ describe('MemoryStock (Lua semantics, D8)', () => {
     expect(await stock.getAdmission('adm_2')).toBeNull();
   });
 
-  it('denylists a jti until its TTL expires', async () => {
+  it('isDenied reads the denylist key (the write side lives in the auth-module; core only reads)', async () => {
     expect(await stock.isDenied('jti-1')).toBe(false);
-    await stock.deny('jti-1', 1000);
+    // Seed the denylist the way the shared Valkey key layout does.
+    stock.counters.set('denylist:jti-1', 1);
     expect(await stock.isDenied('jti-1')).toBe(true);
   });
 

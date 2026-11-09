@@ -45,24 +45,20 @@
  *
  * @typedef {object} StockPort
  * @property {Function} getAvailable - (eventId, categoryId) => Promise<number>.
- * @property {Function} getHeld - (eventId, categoryId) => Promise<number>.
- * @property {Function} getSold - (eventId, categoryId) => Promise<number>.
  * @property {Function} getNikCount - (eventId, nikHmac) => Promise<number>.
  * @property {Function} checkAndHold - (eventId, items) => Promise<{ok: boolean, code?: string, categoryId?: string, nikHmac?: string}>.
  * @property {Function} release - (eventId, items) => Promise<void>.
  * @property {Function} settle - (eventId, items) => Promise<void>.
  * @property {Function} setAdmission - (token, entry, ttlMs) => Promise<void>.
  * @property {Function} getAdmission - (token) => Promise<object|null>.
- * @property {Function} deleteAdmission - (token) => Promise<void>.
  * @property {Function} addValidatedNik - (token, nikHmac) => Promise<void>.
  * @property {Function} getValidatedNiks - (token) => Promise<string[]>.
  * @property {Function} isDenied - (jti) => Promise<boolean>.
- * @property {Function} deny - (jti, ttlMs) => Promise<void>.
  * @property {Function} close - () => Promise<void>.
  */
 
 /**
- * Dukcapil verification port: NIK-only verdict (format + existence).
+ * Dukcapil verification port: format-only verdict.
  * Implemented by DukcapilClient (infrastructure/external/dukcapil.js).
  * A negative verdict BLOCKS the purchase (gating, 6 Nov item 4).
  *
