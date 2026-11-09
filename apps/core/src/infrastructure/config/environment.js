@@ -27,8 +27,10 @@ const environmentSchema = Joi.object({
   PAYMENT_URL: Joi.string().uri().allow(''),
   SERVICE_KEY: Joi.string().allow(''),
   // SQS (ADR-0023). Unset = in-memory event bus (local dev).
+  // Only empty-slot (core -> queue) and notification (core ->
+  // notification-module) remain: admission registration is synchronous
+  // via POST /v1/core/admission (ADR-0027), not an SQS queue.
   AWS_REGION: Joi.string().default('ap-southeast-3'),
-  SQS_ADMISSION_QUEUE_URL: Joi.string().uri().allow(''),
   SQS_EMPTY_SLOT_QUEUE_URL: Joi.string().uri().allow(''),
   SQS_NOTIFICATION_QUEUE_URL: Joi.string().uri().allow(''),
   // NIK keys (D24). Production: from KMS/Secrets Manager. Dev: derived/fixed.
@@ -94,7 +96,6 @@ function loadEnvironment(environment = process.env) {
     paymentUrl: value.PAYMENT_URL || null,
     serviceKey: value.SERVICE_KEY || null,
     awsRegion: value.AWS_REGION,
-    sqsAdmissionQueueUrl: value.SQS_ADMISSION_QUEUE_URL || null,
     sqsEmptySlotQueueUrl: value.SQS_EMPTY_SLOT_QUEUE_URL || null,
     sqsNotificationQueueUrl: value.SQS_NOTIFICATION_QUEUE_URL || null,
     nikHmacKey: value.NIK_HMAC_KEY,

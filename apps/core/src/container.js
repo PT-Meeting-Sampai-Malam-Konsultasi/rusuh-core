@@ -1,10 +1,10 @@
 const crypto = require('crypto');
-const { SQSClient } = require('@aws-sdk/client-sqs');
 const { resolveEncryptionKey } = require('@/domain/nik');
 const { createEventsUseCase } = require('@/application/events/events.use-case');
 const { createAttendeesUseCase } = require('@/application/attendees/attendees.use-case');
 const { createBookingUseCase } = require('@/application/bookings/bookings.use-case');
 const { createTicketsUseCase } = require('@/application/tickets/tickets.use-case');
+const { createAdmissionUseCase } = require('@/application/admission/admission.use-case');
 const {
   createRequireAccount,
   createRequireAdmission,
@@ -16,7 +16,7 @@ const { MemoryStore, PgStore } = require('./infrastructure/persistence/store');
 const { MemoryStock, RedisStock } = require('./infrastructure/cache/stock');
 const { DukcapilClient } = require('./infrastructure/external/dukcapil');
 const { PaymentClient } = require('./infrastructure/external/payment');
-const { MemoryEventBus, SqsEventBus, AdmissionConsumer } = require('./infrastructure/messaging/events');
+const { MemoryEventBus, SqsEventBus } = require('./infrastructure/messaging/events');
 const { Sweeper } = require('./infrastructure/sweeper');
 
 /**
@@ -53,6 +53,7 @@ function buildUseCases({
   nikEncryptionKey,
   qrKey,
   fees,
+  admissionTtlMs,
   // Renamed locally: the module also imports mayAccessBooking (the guard
   // itself) for the default graph below; the parameter is the same function.
   mayAccessBooking: accessGuard
@@ -70,19 +71,13 @@ function buildUseCases({
       fees,
       mayAccessBooking: accessGuard
     }),
-    tickets: createTicketsUseCase({ store })
+    tickets: createTicketsUseCase({ store }),
+    admission: createAdmissionUseCase({ stock, ttlMs: admissionTtlMs })
   };
 }
 
-function buildWorkers({ stock, bookingService, config }) {
+function buildWorkers({ bookingService, config }) {
   return {
-    admissionConsumer: new AdmissionConsumer({
-      stock,
-      client: null,
-      queueUrl: config.sqsAdmissionQueueUrl,
-      ttlMs: config.admissionTtlMs,
-      onError: (error) => console.error('[core] admission consumer error:', error.message)
-    }),
     sweeper: new Sweeper({
       bookingService,
       intervalMs: config.sweepIntervalMs,
@@ -141,11 +136,12 @@ function createDefaultDeps(config, overrides = {}) {
     nikEncryptionKey,
     qrKey: config.qrHmacKey,
     fees: config.fees,
+    admissionTtlMs: config.admissionTtlMs,
     mayAccessBooking
   });
   const { auth: providedAuth } = overrides;
   const auth = providedAuth || buildAuth({ publicKeys, isDenied, stock, serviceKey: config.serviceKey });
-  const workers = buildWorkers({ stock, bookingService: useCases.bookings, config });
+  const workers = buildWorkers({ bookingService: useCases.bookings, config });
   return {
     config,
     store,
@@ -161,18 +157,19 @@ function createDefaultDeps(config, overrides = {}) {
     // use case). Kept on the graph so createDeps rebuilds (which spread
     // ...deps into buildUseCases) keep it.
     mayAccessBooking,
-    // Domain keys/config the use cases need (nikHmacKey, qrKey, fees).
-    // They live in config, but they are ALSO kept on the graph top level
-    // so createDeps rebuilds (which spread ...deps into buildUseCases)
-    // keep them. Without this, the rebuilds pass undefined for all three
-    // (the graph only had them nested under config), so with real infra
-    // (Postgres/Valkey/SQS) the rebuilt attendees use case throws in
-    // hmacNik and the rebuilt bookings use case throws in computePrice /
-    // qrPayload. Pre-existing latent bug (same spread shape in the old
-    // deps.js); fixed here, before the local real test.
+    // Domain keys/config the use cases need (nikHmacKey, qrKey, fees,
+    // admissionTtlMs). They live in config, but they are ALSO kept on the
+    // graph top level so createDeps rebuilds (which spread ...deps into
+    // buildUseCases) keep them. Without this, the rebuilds pass undefined
+    // for all of them (the graph only had them nested under config), so
+    // with real infra (Postgres/Valkey/SQS) the rebuilt attendees use case
+    // throws in hmacNik and the rebuilt bookings use case throws in
+    // computePrice / qrPayload. Pre-existing latent bug (same spread shape
+    // in the old deps.js); fixed here, before the local real test.
     nikHmacKey: config.nikHmacKey,
     qrKey: config.qrHmacKey,
     fees: config.fees,
+    admissionTtlMs: config.admissionTtlMs,
     useCases,
     auth,
     ...workers
@@ -193,7 +190,7 @@ async function createDeps(config, overrides = {}) {
   if (config.databaseUrl && !overrides.store) {
     deps.store = await PgStore.connect(config.databaseUrl);
     deps.useCases = buildUseCases({ ...deps, store: deps.store });
-    deps.sweeper = buildWorkers({ stock: deps.stock, bookingService: deps.useCases.bookings, config }).sweeper;
+    deps.sweeper = buildWorkers({ bookingService: deps.useCases.bookings, config }).sweeper;
   }
   if (config.valkeyUrl && !overrides.stock) {
     deps.stock = await RedisStock.connect(config.valkeyUrl);
@@ -204,14 +201,7 @@ async function createDeps(config, overrides = {}) {
       stock: deps.stock,
       serviceKey: config.serviceKey
     });
-    deps.sweeper = buildWorkers({ stock: deps.stock, bookingService: deps.useCases.bookings, config }).sweeper;
-    deps.admissionConsumer = new AdmissionConsumer({
-      stock: deps.stock,
-      client: deps.admissionConsumer.client,
-      queueUrl: config.sqsAdmissionQueueUrl,
-      ttlMs: config.admissionTtlMs,
-      onError: (error) => console.error('[core] admission consumer error:', error.message)
-    });
+    deps.sweeper = buildWorkers({ bookingService: deps.useCases.bookings, config }).sweeper;
   }
   if (config.sqsEmptySlotQueueUrl && config.sqsNotificationQueueUrl && !overrides.eventBus) {
     deps.eventBus = await SqsEventBus.create({
@@ -220,16 +210,7 @@ async function createDeps(config, overrides = {}) {
       notificationQueueUrl: config.sqsNotificationQueueUrl
     });
     deps.useCases = buildUseCases({ ...deps, eventBus: deps.eventBus });
-    deps.sweeper = buildWorkers({ stock: deps.stock, bookingService: deps.useCases.bookings, config }).sweeper;
-    if (config.sqsAdmissionQueueUrl) {
-      deps.admissionConsumer = new AdmissionConsumer({
-        stock: deps.stock,
-        client: new SQSClient({ region: config.awsRegion }),
-        queueUrl: config.sqsAdmissionQueueUrl,
-        ttlMs: config.admissionTtlMs,
-        onError: (error) => console.error('[core] admission consumer error:', error.message)
-      });
-    }
+    deps.sweeper = buildWorkers({ bookingService: deps.useCases.bookings, config }).sweeper;
   }
   return deps;
 }

@@ -11,6 +11,7 @@ function createHealthRouter(controller) {
   router.get('/sys/ping', controller.ping);
   router.get('/health/live', controller.live);
   router.get('/health/ready', controller.ready);
+  router.get('/readyz', controller.readyz);
   return router;
 }
 

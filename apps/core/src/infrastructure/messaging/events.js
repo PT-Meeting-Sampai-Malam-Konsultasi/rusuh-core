@@ -1,14 +1,16 @@
-/* eslint-disable max-classes-per-file -- Memory + SQS buses + consumer share one file by design. */
+/* eslint-disable max-classes-per-file -- Memory + SQS buses share one file by design. */
 const crypto = require('crypto');
-const { SQSClient, SendMessageCommand, ReceiveMessageCommand, DeleteMessageCommand } = require('@aws-sdk/client-sqs');
+const { SQSClient, SendMessageCommand } = require('@aws-sdk/client-sqs');
 
 /**
  * Event bus (SQS, ADR-0023). Two implementations behind one interface:
  *  - MemoryEventBus: in-memory, records published events (tests, local dev).
  *  - SqsEventBus: @aws-sdk/client-sqs, sends to the configured queue URLs.
  *
- * Queues (logical): admission (queue -> core), empty-slot (core -> queue),
- * notification (core -> notification-module, email jobs).
+ * Queues (logical): empty-slot (core -> queue), notification
+ * (core -> notification-module, email jobs). The admission queue is gone:
+ * admission registration is synchronous via POST /v1/core/admission
+ * (ADR-0027 replaces the SQS admission event, ADR-0021/0023).
  * Physical names follow the infra convention: rusuh-<env>-<name>.
  */
 
@@ -37,7 +39,6 @@ class MemoryEventBus {
   constructor() {
     this.emptySlotEvents = [];
     this.emailJobs = [];
-    this.admissionEvents = [];
   }
 
   async publishEmptySlot(event) {
@@ -50,12 +51,6 @@ class MemoryEventBus {
     const full = job.enqueued_at ? job : emailJob(job);
     this.emailJobs.push(full);
     return full;
-  }
-
-  /** Test/dev helper: inject an admission event as if it arrived from SQS. */
-  async receiveAdmission(event) {
-    this.admissionEvents.push(event);
-    return event;
   }
 }
 
@@ -96,103 +91,4 @@ class SqsEventBus {
   }
 }
 
-/**
- * Admission event consumer (queue -> core, ADR-0021/0023).
- * Consumes the admission SQS queue (long polling, 20 s) and stores each
- * admission entry in Valkey with TTL 16 minutes (set when the user enters
- * Detail — here, when the event is consumed; the Detail-entry TTL is set by
- * the bookings flow when the user actually opens Detail).
- * Idempotent: storing the same entry twice is a no-op.
- */
-class AdmissionConsumer {
-  /**
-   * @param {object} options
-   * @param {object} options.stock - Stock adapter (setAdmission).
-   * @param {object} [options.client] - SQSClient (required for polling).
-   * @param {string} [options.queueUrl] - Admission queue URL.
-   * @param {number} [options.ttlMs] - Admission entry TTL (default 16 min).
-   * @param {Function} [options.onError] - Error hook (logging).
-   */
-  constructor({ stock, client, queueUrl, ttlMs = 16 * 60 * 1000, onError = () => {} } = {}) {
-    if (!stock) throw new Error('AdmissionConsumer requires stock');
-    this.stock = stock;
-    this.client = client || null;
-    this.queueUrl = queueUrl || null;
-    this.ttlMs = ttlMs;
-    this.onError = onError;
-    this.running = false;
-  }
-
-  /**
-   * Handles one admission event (also the unit-testable entry point).
-   * Schema (LLD-02 §13): { admission_token, slot_id, user_id, event_id,
-   * max_tickets, expires_at, issued_at }.
-   *
-   * @param {object} event - Admission event.
-   * @returns {Promise<{stored: boolean, reason?: string}>}
-   */
-  async handleAdmissionEvent(event) {
-    if (!event || typeof event.admission_token !== 'string' || typeof event.user_id !== 'string') {
-      return { stored: false, reason: 'malformed' };
-    }
-    const entry = {
-      user_id: event.user_id,
-      event_id: event.event_id,
-      slot_id: event.slot_id || null,
-      max_tickets: event.max_tickets || 3,
-      expires_at: event.expires_at || new Date(Date.now() + this.ttlMs).toISOString()
-    };
-    const ttlMs = Math.max(new Date(entry.expires_at).getTime() - Date.now(), 1000);
-    await this.stock.setAdmission(event.admission_token, entry, Math.min(ttlMs, this.ttlMs));
-    return { stored: true };
-  }
-
-  /** Starts long-polling the admission queue (no-op when no SQS is configured). */
-  start() {
-    if (!this.client || !this.queueUrl) return false;
-    this.running = true;
-    this._poll();
-    return true;
-  }
-
-  stop() {
-    this.running = false;
-  }
-
-  async _poll() {
-    if (!this.running) return;
-    try {
-      const response = await this.client.send(
-        new ReceiveMessageCommand({
-          QueueUrl: this.queueUrl,
-          MaxNumberOfMessages: 10,
-          WaitTimeSeconds: 20,
-          VisibilityTimeout: 60
-        })
-      );
-      // Messages are independent: handle + delete each in parallel.
-      await Promise.all(
-        (response.Messages || []).map(async (message) => {
-          try {
-            const event = JSON.parse(message.Body);
-            await this.handleAdmissionEvent(event);
-            await this.client.send(
-              new DeleteMessageCommand({ QueueUrl: this.queueUrl, ReceiptHandle: message.ReceiptHandle })
-            );
-          } catch (error) {
-            this.onError(error);
-            // No delete: the message becomes visible again (redrive/DLQ handles poison).
-          }
-        })
-      );
-    } catch (error) {
-      this.onError(error);
-      await new Promise((resolve) => {
-        setTimeout(resolve, 5000);
-      });
-    }
-    if (this.running) setImmediate(() => this._poll());
-  }
-}
-
-module.exports = { MemoryEventBus, SqsEventBus, AdmissionConsumer, emptySlotEvent, emailJob };
+module.exports = { MemoryEventBus, SqsEventBus, emptySlotEvent, emailJob };

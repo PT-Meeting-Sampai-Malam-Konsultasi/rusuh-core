@@ -10,7 +10,7 @@ const express = require('express');
 function createAttendeesRouter(controller, auth) {
   const router = express.Router();
   router.post(
-    '/v1/events/:eventId/attendees/validate',
+    '/v1/core/events/:eventId/attendees/validate',
     auth.requireAccount,
     auth.requireAdmission,
     controller.validateAttendee

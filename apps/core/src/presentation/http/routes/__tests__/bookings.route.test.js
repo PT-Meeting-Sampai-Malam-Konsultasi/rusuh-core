@@ -5,7 +5,10 @@ const ATTENDEE = { fieldIndex: 0, fullName: 'Edy Supardi', nik: '317101010190000
 
 /** Validates one attendee and returns the validation token. */
 async function validateAttendee(app, headers) {
-  const response = await request(app).post('/v1/events/evt_2026_gbk/attendees/validate').set(headers).send(ATTENDEE);
+  const response = await request(app)
+    .post('/v1/core/events/evt_2026_gbk/attendees/validate')
+    .set(headers)
+    .send(ATTENDEE);
   expect(response.status).toBe(200);
   return response.body.validationToken;
 }
@@ -13,7 +16,7 @@ async function validateAttendee(app, headers) {
 /** Creates a SELECTION booking for one Festival B ticket. */
 async function createBooking(app, headers, validationToken) {
   return request(app)
-    .post('/v1/bookings')
+    .post('/v1/core/bookings')
     .set(headers)
     .send({
       eventId: 'evt_2026_gbk',
@@ -52,37 +55,41 @@ describe('bookings journey (D5)', () => {
     expect(again.body.bookingId).toBe(bookingId);
 
     // 4. Enter payment (PAYMENT_PENDING, 10 min, snap token).
-    const payment = await request(app).post(`/v1/bookings/${bookingId}/payment`).set(headers).send();
+    const payment = await request(app).post(`/v1/core/bookings/${bookingId}/payment`).set(headers).send();
     expect(payment.status).toBe(200);
     expect(payment.body).toMatchObject({ bookingId, snapToken: 'stub-snap-token' });
     expect(payment.body.paymentExpiresAt).toBeDefined();
 
     // 5. Entering payment again is idempotent (same snap token).
-    const paymentAgain = await request(app).post(`/v1/bookings/${bookingId}/payment`).set(headers).send();
+    const paymentAgain = await request(app).post(`/v1/core/bookings/${bookingId}/payment`).set(headers).send();
     expect(paymentAgain.status).toBe(200);
     expect(paymentAgain.body.snapToken).toBe('stub-snap-token');
 
     // 6. Check-status confirms the settlement (ADR-0008) -> PAID + tickets.
-    const status = await request(app).post(`/v1/bookings/${bookingId}/check-status`).set(headers).send();
+    const status = await request(app).post(`/v1/core/bookings/${bookingId}/check-status`).set(headers).send();
     expect(status.status).toBe(200);
     expect(status.body.status).toBe('PAID');
     expect(status.body.tickets).toHaveLength(1);
     expect(status.body.tickets[0].ticketCode).toBe('SMD-FB-00001');
 
     // 7. Tickets are listed (paid only, D19).
-    const tickets = await request(app).get('/v1/tickets').set('Authorization', `Bearer ${accountToken}`);
+    const tickets = await request(app).get('/v1/core/tickets').set('Authorization', `Bearer ${accountToken}`);
     expect(tickets.status).toBe(200);
     expect(tickets.body.items).toHaveLength(1);
     expect(tickets.body.items[0].nikMasked).toBe('3171 •••• •••• 0001');
     expect(tickets.body.items[0].qrPayload).toMatch(/^RSH1\.SMD-FB-00001\./);
 
     const { ticketId } = tickets.body.items[0];
-    const ticket = await request(app).get(`/v1/tickets/${ticketId}`).set('Authorization', `Bearer ${accountToken}`);
+    const ticket = await request(app)
+      .get(`/v1/core/tickets/${ticketId}`)
+      .set('Authorization', `Bearer ${accountToken}`);
     expect(ticket.status).toBe(200);
     expect(ticket.body.ticketId).toBe(ticketId);
 
     // 8. The booking is readable by the account.
-    const fetched = await request(app).get(`/v1/bookings/${bookingId}`).set('Authorization', `Bearer ${accountToken}`);
+    const fetched = await request(app)
+      .get(`/v1/core/bookings/${bookingId}`)
+      .set('Authorization', `Bearer ${accountToken}`);
     expect(fetched.status).toBe(200);
     expect(fetched.body.status).toBe('PAID');
   });
@@ -91,7 +98,7 @@ describe('bookings journey (D5)', () => {
     const { app, admissionToken, accountToken } = await createTestApp();
     const headers = { Authorization: `Bearer ${accountToken}`, 'X-Admission-Token': admissionToken };
     const response = await request(app)
-      .post('/v1/bookings')
+      .post('/v1/core/bookings')
       .set(headers)
       .send({ eventId: 'evt_2026_gbk', tickets: [{ categoryId: 'cat_festival_b', validationToken: 'av_bogus' }] });
     expect(response.status).toBe(409);
@@ -111,7 +118,7 @@ describe('bookings journey (D5)', () => {
     const headers = { Authorization: `Bearer ${accountToken}`, 'X-Admission-Token': admissionToken };
     const validationToken = await validateAttendee(app, headers);
     const response = await request(app)
-      .post('/v1/bookings')
+      .post('/v1/core/bookings')
       .set(headers)
       .send({
         eventId: 'evt_2026_gbk',
@@ -129,7 +136,7 @@ describe('bookings journey (D5)', () => {
     const { bookingId } = create.body;
     // Force the SELECTION to expire.
     await app.locals.deps.store.updateBooking(bookingId, { expiresAt: new Date(Date.now() - 1000).toISOString() });
-    const response = await request(app).post(`/v1/bookings/${bookingId}/payment`).set(headers).send();
+    const response = await request(app).post(`/v1/core/bookings/${bookingId}/payment`).set(headers).send();
     expect(response.status).toBe(409);
     expect(response.body.code).toBe('BOOKING_NOT_HELD');
   });
@@ -140,7 +147,7 @@ describe('bookings journey (D5)', () => {
     const validationToken = await validateAttendee(app, headers);
     const create = await createBooking(app, headers, validationToken);
     const { bookingId } = create.body;
-    await request(app).post(`/v1/bookings/${bookingId}/payment`).set(headers).send();
+    await request(app).post(`/v1/core/bookings/${bookingId}/payment`).set(headers).send();
     // Force the payment deadline to pass.
     await app.locals.deps.store.updateBooking(bookingId, {
       paymentExpiresAt: new Date(Date.now() - 1000).toISOString()
@@ -163,7 +170,7 @@ describe('bookings journey (D5)', () => {
     const validationToken = await validateAttendee(app, headers);
     const create = await createBooking(app, headers, validationToken);
     const { bookingId } = create.body;
-    const payment = await request(app).post(`/v1/bookings/${bookingId}/payment`).set(headers).send();
+    const payment = await request(app).post(`/v1/core/bookings/${bookingId}/payment`).set(headers).send();
     expect(payment.status).toBe(200);
 
     // Wrong service key -> 401.
@@ -213,11 +220,13 @@ describe('bookings journey (D5)', () => {
     const { bookingId } = create.body;
     // Another account (a different Bearer token) with no admission for this booking.
     const response = await request(app)
-      .get(`/v1/bookings/${bookingId}`)
+      .get(`/v1/core/bookings/${bookingId}`)
       .set('Authorization', 'Bearer other-account-token');
     expect(response.status).toBe(404);
     // The owner can still read it.
-    const owner = await request(app).get(`/v1/bookings/${bookingId}`).set('Authorization', `Bearer ${accountToken}`);
+    const owner = await request(app)
+      .get(`/v1/core/bookings/${bookingId}`)
+      .set('Authorization', `Bearer ${accountToken}`);
     expect(owner.status).toBe(200);
   });
 
@@ -226,7 +235,7 @@ describe('bookings journey (D5)', () => {
     const headers = { Authorization: `Bearer ${accountToken}`, 'X-Admission-Token': admissionToken };
     const validationToken = await validateAttendee(app, headers);
     const create = await createBooking(app, headers, validationToken);
-    const active = await request(app).get('/v1/bookings/active').set('Authorization', `Bearer ${accountToken}`);
+    const active = await request(app).get('/v1/core/bookings/active').set('Authorization', `Bearer ${accountToken}`);
     expect(active.status).toBe(200);
     expect(active.body.items).toHaveLength(1);
     expect(active.body.items[0].bookingId).toBe(create.body.bookingId);

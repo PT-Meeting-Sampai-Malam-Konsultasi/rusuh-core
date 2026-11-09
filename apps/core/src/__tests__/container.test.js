@@ -49,8 +49,8 @@ describe('container (composition root)', () => {
     expect(deps.store).toBeInstanceOf(MemoryStore);
     expect(deps.useCases.bookings).toBeDefined();
     expect(deps.useCases.attendees).toBeDefined();
+    expect(deps.useCases.admission).toBeDefined();
     expect(deps.sweeper).toBeDefined();
-    expect(deps.admissionConsumer).toBeDefined();
   });
 
   it('createDeps with overrides does not upgrade the overridden adapters', async () => {

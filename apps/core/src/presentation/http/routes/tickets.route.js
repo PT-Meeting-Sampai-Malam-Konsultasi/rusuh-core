@@ -9,8 +9,8 @@ const express = require('express');
  */
 function createTicketsRouter(controller, auth) {
   const router = express.Router();
-  router.get('/v1/tickets', auth.requireAccount, controller.listMyTickets);
-  router.get('/v1/tickets/:ticketId', auth.requireAccount, controller.getTicket);
+  router.get('/v1/core/tickets', auth.requireAccount, controller.listMyTickets);
+  router.get('/v1/core/tickets/:ticketId', auth.requireAccount, controller.getTicket);
   return router;
 }
 

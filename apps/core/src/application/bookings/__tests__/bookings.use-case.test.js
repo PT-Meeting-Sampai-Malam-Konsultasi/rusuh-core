@@ -140,9 +140,9 @@ describe('booking use case (state transitions)', () => {
     expect(deps.useCases.events).toBeDefined();
     expect(deps.useCases.attendees).toBeDefined();
     expect(deps.useCases.tickets).toBeDefined();
+    expect(deps.useCases.admission).toBeDefined();
     expect(deps.auth.requireAccount).toBeDefined();
     expect(deps.sweeper).toBeDefined();
-    expect(deps.admissionConsumer).toBeDefined();
   });
 
   it('reconcileOrphans is a no-op placeholder until the Valkey scan is wired', async () => {

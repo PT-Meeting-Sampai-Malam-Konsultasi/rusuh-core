@@ -10,24 +10,21 @@ const { createDeps } = require('@/container');
 /**
  * Starts the HTTP server and registers controlled shutdown handlers.
  * Builds the dependency graph first (real Postgres/Valkey/SQS when their
- * URLs are configured, in-memory otherwise), then starts the sweeper and
- * the admission consumer.
+ * URLs are configured, in-memory otherwise), then starts the sweeper.
  *
  * @returns {Promise<http.Server>} Active HTTP server.
  */
 async function startServer() {
   const config = loadEnvironment();
   const deps = await createDeps(config);
-  const app = createApp({ config, deps });
-  const server = http.createServer(app);
+  // Declared before createApp so /readyz can read it: once shutdown starts
+  // (SIGTERM), /readyz answers 503 so the ALB stops sending new requests.
   let shuttingDown = false;
+  const app = createApp({ config, deps, isShuttingDown: () => shuttingDown });
+  const server = http.createServer(app);
 
-  // Background workers (D9 sweeper + admission consumer, ADR-0023).
+  // Background worker (D9 sweeper).
   deps.sweeper.start();
-  const consumerStarted = deps.admissionConsumer.start();
-  if (!consumerStarted && config.nodeEnv !== 'test') {
-    console.warn('[core] admission consumer not started (no SQS admission queue configured).');
-  }
 
   /**
    * Stops accepting connections and exits after cleanup or the configured deadline.
@@ -43,7 +40,6 @@ async function startServer() {
     logger?.addTags?.(['server', 'shutdown'])?.addData?.({ signal })?.info?.('Graceful shutdown started');
 
     deps.sweeper.stop();
-    deps.admissionConsumer.stop();
     Promise.all([deps.store.close(), deps.stock.close()]).catch(() => {});
 
     const timeout = setTimeout(() => process.exit(1), config.gracefulShutdownTimeoutMs);

@@ -37,8 +37,11 @@ function createRequireAccount({ verify, publicKeys, isDenied } = {}) {
 /**
  * Admission validation (ADR-0021): validates the X-Admission-Token against
  * the Valkey entry (exists + belongs to this account + event matches).
- * The entry may not exist yet (admission is async via SQS) — the lookup is
- * retried briefly (~3 s, ~200 ms interval) before 403 ADMISSION_INVALID.
+ * The entry is registered synchronously (POST /v1/core/admission,
+ * ADR-0027) before the user receives the token, so it is present by the
+ * time the user opens Detail; the lookup is still retried briefly (~3 s,
+ * ~200 ms interval) as a defensive measure against transient Valkey lag
+ * before 403 ADMISSION_INVALID.
  * Attaches req.admission = { token, userId, eventId, slotId, maxTickets, expiresAt }.
  *
  * @param {object} deps
@@ -58,8 +61,10 @@ function createRequireAdmission({ stock, retryMs = 3000, retryIntervalMs = 200 }
           'The admission token is missing, expired or no longer matches a live slot.'
         );
       }
-      // The entry may not exist yet (admission is async via SQS) — the lookup
-      // is retried briefly (~3 s, ~200 ms interval) before 403 ADMISSION_INVALID.
+      // The entry is registered synchronously before the user receives the
+      // token (ADR-0027), so it is present by the time the user opens
+      // Detail; the lookup is still retried briefly (~3 s, ~200 ms
+      // interval) as a defensive measure against transient Valkey lag.
       // Recursion (not a loop) keeps the retry sequential without await-in-loop.
       const retryCount = Math.max(Math.ceil(retryMs / retryIntervalMs), 1);
       const lookupWithRetry = async (attemptsLeft) => {

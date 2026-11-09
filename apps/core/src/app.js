@@ -18,11 +18,12 @@ const { createDefaultDeps } = require('@/container');
  * @param {object} options.config - Validated service configuration.
  * @param {object} [options.platform] - Platform helper implementation.
  * @param {Function} [options.isReady] - Optional readiness predicate.
+ * @param {Function} [options.isShuttingDown] - Optional shutdown predicate (for /readyz).
  * @param {object} [options.deps] - Pre-built dependency graph (createDeps).
  *   When omitted, the default (in-memory) graph is built from the config.
  * @returns {import('express').Express} Configured Express application.
  */
-function createApp({ config, platform = defaultPlatform, isReady, deps } = {}) {
+function createApp({ config, platform = defaultPlatform, isReady, isShuttingDown, deps } = {}) {
   if (!config) throw new Error('createApp requires validated configuration');
 
   const app = express();
@@ -42,7 +43,12 @@ function createApp({ config, platform = defaultPlatform, isReady, deps } = {}) {
   );
   app.use(express.urlencoded({ extended: true, limit: config.bodyLimit }));
 
-  const mounted = mountRoutes(app, { config, isReady, deps: deps || createDefaultDeps(config) });
+  const mounted = mountRoutes(app, {
+    config,
+    isReady,
+    isShuttingDown,
+    deps: deps || createDefaultDeps(config)
+  });
   app.locals.deps = mounted.deps;
   app.use(notFound);
   app.use(createErrorHandler({ platform }));

@@ -2,13 +2,13 @@ const request = require('supertest');
 const { hmacNik } = require('@/domain/nik');
 const { createTestApp } = require('@/test-app');
 
-describe('POST /v1/events/:eventId/attendees/validate', () => {
+describe('POST /v1/core/events/:eventId/attendees/validate', () => {
   const validBody = { fieldIndex: 0, fullName: 'Edy Supardi', nik: '3171010101900001' };
 
   it('validates a NIK and returns a validationToken + nikMasked', async () => {
     const { app, admissionToken, accountToken } = await createTestApp();
     const response = await request(app)
-      .post('/v1/events/evt_2026_gbk/attendees/validate')
+      .post('/v1/core/events/evt_2026_gbk/attendees/validate')
       .set('Authorization', `Bearer ${accountToken}`)
       .set('X-Admission-Token', admissionToken)
       .send(validBody);
@@ -21,7 +21,7 @@ describe('POST /v1/events/:eventId/attendees/validate', () => {
   it('rejects a 16-digit NIK with an impossible birth date (422 NIK_INVALID)', async () => {
     const { app, admissionToken, accountToken } = await createTestApp();
     const response = await request(app)
-      .post('/v1/events/evt_2026_gbk/attendees/validate')
+      .post('/v1/core/events/evt_2026_gbk/attendees/validate')
       .set('Authorization', `Bearer ${accountToken}`)
       .set('X-Admission-Token', admissionToken)
       .send({ fieldIndex: 0, fullName: 'Edy Supardi', nik: '3171013202900001' });
@@ -32,7 +32,7 @@ describe('POST /v1/events/:eventId/attendees/validate', () => {
   it('rejects a non-16-digit NIK at the schema level (400 VALIDATION_FAILED)', async () => {
     const { app, admissionToken, accountToken } = await createTestApp();
     const response = await request(app)
-      .post('/v1/events/evt_2026_gbk/attendees/validate')
+      .post('/v1/core/events/evt_2026_gbk/attendees/validate')
       .set('Authorization', `Bearer ${accountToken}`)
       .set('X-Admission-Token', admissionToken)
       .send({ fieldIndex: 0, fullName: 'Edy Supardi', nik: '31710101019000' });
@@ -46,7 +46,7 @@ describe('POST /v1/events/:eventId/attendees/validate', () => {
       dukcapilReason: 'NIK_NOT_FOUND'
     });
     const response = await request(app)
-      .post('/v1/events/evt_2026_gbk/attendees/validate')
+      .post('/v1/core/events/evt_2026_gbk/attendees/validate')
       .set('Authorization', `Bearer ${accountToken}`)
       .set('X-Admission-Token', admissionToken)
       .send(validBody);
@@ -57,8 +57,11 @@ describe('POST /v1/events/:eventId/attendees/validate', () => {
   it('rejects a duplicate NIK in the same order (409 DUPLICATE_NIK)', async () => {
     const { app, admissionToken, accountToken } = await createTestApp();
     const headers = { Authorization: `Bearer ${accountToken}`, 'X-Admission-Token': admissionToken };
-    await request(app).post('/v1/events/evt_2026_gbk/attendees/validate').set(headers).send(validBody);
-    const response = await request(app).post('/v1/events/evt_2026_gbk/attendees/validate').set(headers).send(validBody);
+    await request(app).post('/v1/core/events/evt_2026_gbk/attendees/validate').set(headers).send(validBody);
+    const response = await request(app)
+      .post('/v1/core/events/evt_2026_gbk/attendees/validate')
+      .set(headers)
+      .send(validBody);
     expect(response.status).toBe(409);
     expect(response.body.code).toBe('DUPLICATE_NIK');
   });
@@ -72,7 +75,7 @@ describe('POST /v1/events/:eventId/attendees/validate', () => {
       3
     );
     const response = await request(app)
-      .post('/v1/events/evt_2026_gbk/attendees/validate')
+      .post('/v1/core/events/evt_2026_gbk/attendees/validate')
       .set('Authorization', `Bearer ${accountToken}`)
       .set('X-Admission-Token', admissionToken)
       .send(validBody);
@@ -83,7 +86,7 @@ describe('POST /v1/events/:eventId/attendees/validate', () => {
   it('rejects a request without an admission token (403 ADMISSION_INVALID)', async () => {
     const { app, accountToken } = await createTestApp();
     const response = await request(app)
-      .post('/v1/events/evt_2026_gbk/attendees/validate')
+      .post('/v1/core/events/evt_2026_gbk/attendees/validate')
       .set('Authorization', `Bearer ${accountToken}`)
       .send(validBody);
     expect(response.status).toBe(403);
@@ -93,7 +96,7 @@ describe('POST /v1/events/:eventId/attendees/validate', () => {
   it('rejects a request without an account token (401 UNAUTHORIZED)', async () => {
     const { app, admissionToken } = await createTestApp();
     const response = await request(app)
-      .post('/v1/events/evt_2026_gbk/attendees/validate')
+      .post('/v1/core/events/evt_2026_gbk/attendees/validate')
       .set('X-Admission-Token', admissionToken)
       .send(validBody);
     expect(response.status).toBe(401);
