@@ -50,9 +50,9 @@ describe('createErrorHandler', () => {
     const platform = makePlatform();
     const handler = createErrorHandler({ platform });
     const response = makeResponse();
-    handler(apiError('TIKET_TIDAK_DITEMUKAN', 'Ticket tk_1 was not found'), {}, response, () => {});
+    handler(apiError('TICKET_NOT_FOUND', 'Ticket tk_1 was not found'), {}, response, () => {});
     expect(response.statusCode).toBe(404);
-    expect(response.body).toMatchObject({ code: 'TIKET_TIDAK_DITEMUKAN', status: 404 });
+    expect(response.body).toMatchObject({ code: 'TICKET_NOT_FOUND', status: 404 });
     expect(response.locals.skipResponseEnvelope).toBe(true);
   });
 
@@ -61,10 +61,10 @@ describe('createErrorHandler', () => {
     const handler = createErrorHandler({ platform });
     const response = makeResponse();
     const boomError = Boom.notFound('Ticket tk_1 was not found');
-    boomError.data = { code: 'TIKET_TIDAK_DITEMUKAN' };
+    boomError.data = { code: 'TICKET_NOT_FOUND' };
     handler(boomError, {}, response, () => {});
     expect(response.statusCode).toBe(404);
-    expect(response.body.code).toBe('TIKET_TIDAK_DITEMUKAN');
+    expect(response.body.code).toBe('TICKET_NOT_FOUND');
   });
 
   it('renders a Boom error without a code as its Boom payload', () => {

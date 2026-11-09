@@ -83,7 +83,7 @@ function createOfficerUseCase({ ticketStore, auditStore, nikCrypto }) {
      */
     async lookupTicket(codeOrId) {
       const ticket = await ticketStore.findByCodeOrId(codeOrId);
-      if (!ticket) throw apiError('TIKET_TIDAK_DITEMUKAN', `Ticket ${codeOrId} was not found`);
+      if (!ticket) throw apiError('TICKET_NOT_FOUND', `Ticket ${codeOrId} was not found`);
       return toTicketView(ticket);
     },
 
@@ -100,7 +100,7 @@ function createOfficerUseCase({ ticketStore, auditStore, nikCrypto }) {
      */
     async scanTicket(codeOrId, { officerId, gate }) {
       const ticket = await ticketStore.findByCodeOrId(codeOrId);
-      if (!ticket) throw apiError('TIKET_TIDAK_DITEMUKAN', `Ticket ${codeOrId} was not found`);
+      if (!ticket) throw apiError('TICKET_NOT_FOUND', `Ticket ${codeOrId} was not found`);
 
       if (ticket.eventDate && ticket.eventDate !== todayInJakarta()) {
         await auditStore.insert({
@@ -108,7 +108,7 @@ function createOfficerUseCase({ ticketStore, auditStore, nikCrypto }) {
           action: 'SCAN_REJECTED',
           details: { reason: 'not_valid_date', eventDate: ticket.eventDate }
         });
-        throw apiError('TIKET_TIDAK_BERLAKU', `Ticket is only valid on ${ticket.eventDate}`);
+        throw apiError('TICKET_NOT_VALID', `Ticket is only valid on ${ticket.eventDate}`);
       }
 
       let nikFull;
@@ -123,7 +123,7 @@ function createOfficerUseCase({ ticketStore, auditStore, nikCrypto }) {
         gate && ticket.gate && gate !== ticket.gate ? { expectedGate: ticket.gate, scannedAtGate: gate } : null;
 
       const result = await ticketStore.markUsed(codeOrId, { usedBy: officerId });
-      if (!result) throw apiError('TIKET_TIDAK_DITEMUKAN', `Ticket ${codeOrId} was not found`);
+      if (!result) throw apiError('TICKET_NOT_FOUND', `Ticket ${codeOrId} was not found`);
       const updated = result.ticket;
 
       // Audit: the full NIK WAS revealed (record the fact + masked NIK, never the value).

@@ -33,16 +33,16 @@ describe('createOfficerController', () => {
   });
 
   it('lookup forwards a use-case error to next', async () => {
-    const useCase = { lookupTicket: jest.fn().mockRejectedValue(apiError('TIKET_TIDAK_DITEMUKAN', 'gone')) };
+    const useCase = { lookupTicket: jest.fn().mockRejectedValue(apiError('TICKET_NOT_FOUND', 'gone')) };
     const controller = createOfficerController(useCase);
     const next = jest.fn();
     await controller.lookup({ params: { ticketId: 'tk_nope' } }, makeResponse(), next);
     expect(next).toHaveBeenCalledTimes(1);
-    expect(next.mock.calls[0][0].data.code).toBe('TIKET_TIDAK_DITEMUKAN');
+    expect(next.mock.calls[0][0].data.code).toBe('TICKET_NOT_FOUND');
   });
 
   it('scan forwards a use-case error to next', async () => {
-    const useCase = { scanTicket: jest.fn().mockRejectedValue(apiError('TIKET_TIDAK_BERLAKU', 'wrong day')) };
+    const useCase = { scanTicket: jest.fn().mockRejectedValue(apiError('TICKET_NOT_VALID', 'wrong day')) };
     const controller = createOfficerController(useCase);
     const response = makeResponse();
     const next = jest.fn();
@@ -52,7 +52,7 @@ describe('createOfficerController', () => {
       next
     );
     expect(next).toHaveBeenCalledTimes(1);
-    expect(next.mock.calls[0][0].data.code).toBe('TIKET_TIDAK_BERLAKU');
+    expect(next.mock.calls[0][0].data.code).toBe('TICKET_NOT_VALID');
     expect(useCase.scanTicket).toHaveBeenCalledWith('tk_1', { officerId: 'acc_officer_1', gate: 'Gerbang 5' });
   });
 

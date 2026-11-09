@@ -29,7 +29,7 @@ wrong role → 403 `FORBIDDEN`.
   officer wins when two scan the same QR at once.
 - **Gate warning.** If the scan `gate` differs from the ticket's expected gate,
   the response carries `gateWarning` but the mark-used is still allowed (LLD-05 §4.1).
-- **Event date.** A scan outside the event's date returns 409 `TIKET_TIDAK_BERLAKU` (LLD-05 §4.2).
+- **Event date.** A scan outside the event's date returns 409 `TICKET_NOT_VALID` (LLD-05 §4.2).
 - **Audit.** Every scan writes `NIK_REVEALED` + `TICKET_MARKED_USED` (or
   `SCAN_REJECTED` for a repeat / out-of-date scan) to `audit_log` with the
   masked NIK only — the full NIK is NEVER written to the audit log or the
@@ -39,9 +39,9 @@ wrong role → 403 `FORBIDDEN`.
 ## Error codes
 
 Repo Problem schema (RFC 9457). `UNAUTHORIZED` (401), `FORBIDDEN` (403),
-`NOT_FOUND` (404, unknown event), `TIKET_TIDAK_DITEMUKAN` (404, unknown ticket),
-`TIKET_SUDAH_DIGUNAKAN` (409 — defined but not returned: mark-used is
-idempotent, see above), `TIKET_TIDAK_BERLAKU` (409), `SERVICE_UNAVAILABLE`
+`NOT_FOUND` (404, unknown event), `TICKET_NOT_FOUND` (404, unknown ticket),
+`TICKET_ALREADY_USED` (409 — defined but not returned: mark-used is
+idempotent, see above), `TICKET_NOT_VALID` (409), `SERVICE_UNAVAILABLE`
 (503, DB/KMS not configured or decrypt failed), `VALIDATION_FAILED` (400).
 
 ## Deviations from LLD-05 (to confirm with the team)
@@ -52,7 +52,7 @@ idempotent, see above), `TIKET_TIDAK_BERLAKU` (409), `SERVICE_UNAVAILABLE`
   `POST /officer/tickets/:id/scan` (per the story brief): a successful scan
   reveals the full NIK and marks the ticket used. The separate reveal endpoint
   is not implemented.
-- **Idempotent repeat scan.** LLD-05 §4.1 returns 409 `TIKET_SUDAH_DIGUNAKAN`
+- **Idempotent repeat scan.** LLD-05 §4.1 returns 409 `TICKET_ALREADY_USED`
   on a second scan; this service returns 200 with the same result (per the
   story brief) and still audits the repeat.
 - **`GET /officer/events/:id/attendees`** is not in LLD-05 §4 (added by the
@@ -61,8 +61,8 @@ idempotent, see above), `TIKET_TIDAK_BERLAKU` (409), `SERVICE_UNAVAILABLE`
 ## Gaps / follow-ups (yaml sync + other branches)
 
 - **openapi.yaml has no `/officer/*` endpoints at all.** The three endpoints
-  above (and the codes `TIKET_TIDAK_DITEMUKAN`, `TIKET_SUDAH_DIGUNAKAN`,
-  `TIKET_TIDAK_BERLAKU`, `FORBIDDEN`, `SERVICE_UNAVAILABLE`) must be added to
+  above (and the codes `TICKET_NOT_FOUND`, `TICKET_ALREADY_USED`,
+  `TICKET_NOT_VALID`, `FORBIDDEN`, `SERVICE_UNAVAILABLE`) must be added to
   `api/openapi.yaml` (ErrorCode enum + Officer tag) in the yaml sync step.
   The `/tickets` and `/tickets/{ticketId}` endpoints in the yaml are
   customer-facing (core.booking, masked NIK) and are NOT this module.

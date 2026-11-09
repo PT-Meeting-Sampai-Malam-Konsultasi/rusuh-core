@@ -2,7 +2,7 @@ const { OFFICER_ERROR_CODES, isKnownCode, officerProblem, apiError } = require('
 
 describe('isKnownCode', () => {
   it('knows officer codes', () => {
-    expect(isKnownCode('TIKET_TIDAK_DITEMUKAN')).toBe(true);
+    expect(isKnownCode('TICKET_NOT_FOUND')).toBe(true);
     expect(isKnownCode('SERVICE_UNAVAILABLE')).toBe(true);
   });
 
@@ -21,12 +21,12 @@ describe('isKnownCode', () => {
 
 describe('officerProblem', () => {
   it('renders an officer code with detail and extra members', () => {
-    const body = officerProblem('TIKET_TIDAK_DITEMUKAN', 'Ticket tk_1 was not found', { ticketId: 'tk_1' });
+    const body = officerProblem('TICKET_NOT_FOUND', 'Ticket tk_1 was not found', { ticketId: 'tk_1' });
     expect(body).toEqual({
       type: 'about:blank',
       title: 'Ticket not found',
       status: 404,
-      code: 'TIKET_TIDAK_DITEMUKAN',
+      code: 'TICKET_NOT_FOUND',
       detail: 'Ticket tk_1 was not found',
       ticketId: 'tk_1'
     });
@@ -49,11 +49,11 @@ describe('officerProblem', () => {
 
 describe('apiError', () => {
   it('carries code, status and data.code', () => {
-    const error = apiError('TIKET_TIDAK_BERLAKU', 'Ticket is only valid on 2026-11-14');
+    const error = apiError('TICKET_NOT_VALID', 'Ticket is only valid on 2026-11-14');
     expect(error).toBeInstanceOf(Error);
-    expect(error.code).toBe('TIKET_TIDAK_BERLAKU');
+    expect(error.code).toBe('TICKET_NOT_VALID');
     expect(error.status).toBe(409);
-    expect(error.data).toEqual({ code: 'TIKET_TIDAK_BERLAKU' });
+    expect(error.data).toEqual({ code: 'TICKET_NOT_VALID' });
     expect(error.message).toBe('Ticket is only valid on 2026-11-14');
   });
 
@@ -69,6 +69,6 @@ describe('apiError', () => {
   });
 
   it('exposes the officer error code table', () => {
-    expect(OFFICER_ERROR_CODES.TIKET_SUDAH_DIGUNAKAN).toEqual({ status: 409, title: 'Ticket already used' });
+    expect(OFFICER_ERROR_CODES.TICKET_ALREADY_USED).toEqual({ status: 409, title: 'Ticket already used' });
   });
 });

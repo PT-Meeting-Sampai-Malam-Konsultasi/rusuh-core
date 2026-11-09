@@ -3,16 +3,16 @@ const { ERROR_CODES, problem } = require('@rusuh/contracts');
 /**
  * Officer-module error codes (LLD-05 §4.1 + §9).
  *
- * NOTE (yaml sync gap): TIKET_TIDAK_DITEMUKAN, TIKET_SUDAH_DIGUNAKAN,
- * TIKET_TIDAK_BERLAKU, FORBIDDEN and SERVICE_UNAVAILABLE are not yet in the
+ * NOTE (yaml sync gap): TICKET_NOT_FOUND, TICKET_ALREADY_USED,
+ * TICKET_NOT_VALID, FORBIDDEN and SERVICE_UNAVAILABLE are not yet in the
  * openapi.yaml ErrorCode enum — they must be added there (the yaml sync step).
  * The codes follow the repo's pattern of specific machine codes (cf. the enum's
  * NIK_SEAT_TAKEN, BOOKING_NOT_HELD, …) and the LLD-05 contract.
  */
 const OFFICER_ERROR_CODES = Object.freeze({
-  TIKET_TIDAK_DITEMUKAN: { status: 404, title: 'Ticket not found' },
-  TIKET_SUDAH_DIGUNAKAN: { status: 409, title: 'Ticket already used' },
-  TIKET_TIDAK_BERLAKU: { status: 409, title: 'Ticket not valid for this event date' },
+  TICKET_NOT_FOUND: { status: 404, title: 'Ticket not found' },
+  TICKET_ALREADY_USED: { status: 409, title: 'Ticket already used' },
+  TICKET_NOT_VALID: { status: 409, title: 'Ticket not valid for this event date' },
   FORBIDDEN: { status: 403, title: 'Forbidden' },
   SERVICE_UNAVAILABLE: { status: 503, title: 'Service unavailable' }
 });

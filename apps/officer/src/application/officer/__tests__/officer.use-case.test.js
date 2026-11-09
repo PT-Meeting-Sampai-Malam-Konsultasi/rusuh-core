@@ -33,11 +33,11 @@ describe('officer service', () => {
     expect(ticket.ticketCode).toBe('SMD-FB-04827');
   });
 
-  it('lookup of an unknown code throws 404 TIKET_TIDAK_DITEMUKAN', async () => {
+  it('lookup of an unknown code throws 404 TICKET_NOT_FOUND', async () => {
     const deps = makeOfficerDeps();
     const service = createOfficerUseCase(deps);
     await expect(service.lookupTicket('SMD-XX-00000')).rejects.toMatchObject({
-      data: { code: 'TIKET_TIDAK_DITEMUKAN' }
+      data: { code: 'TICKET_NOT_FOUND' }
     });
   });
 
@@ -79,12 +79,12 @@ describe('officer service', () => {
     const deps = makeOfficerDeps();
     const service = createOfficerUseCase(deps);
     await expect(service.scanTicket('SMD-XX-00000', { officerId: 'acc_officer_1' })).rejects.toMatchObject({
-      data: { code: 'TIKET_TIDAK_DITEMUKAN' }
+      data: { code: 'TICKET_NOT_FOUND' }
     });
     expect(await deps.auditStore.list()).toHaveLength(0);
   });
 
-  it('scan outside the event date throws 409 TIKET_TIDAK_BERLAKU', async () => {
+  it('scan outside the event date throws 409 TICKET_NOT_VALID', async () => {
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', {
       timeZone: 'Asia/Jakarta'
     });
@@ -94,7 +94,7 @@ describe('officer service', () => {
     });
     const service = createOfficerUseCase(deps);
     await expect(service.scanTicket('SMD-FB-04827', { officerId: 'acc_officer_1' })).rejects.toMatchObject({
-      data: { code: 'TIKET_TIDAK_BERLAKU' }
+      data: { code: 'TICKET_NOT_VALID' }
     });
     const audits = await deps.auditStore.list();
     expect(audits).toHaveLength(1);

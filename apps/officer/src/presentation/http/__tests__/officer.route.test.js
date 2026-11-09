@@ -33,13 +33,13 @@ describe('officer routes', () => {
     expect(response.body).not.toHaveProperty('nikFull');
   });
 
-  it('GET an unknown ticket returns 404 TIKET_TIDAK_DITEMUKAN', async () => {
+  it('GET an unknown ticket returns 404 TICKET_NOT_FOUND', async () => {
     const app = buildApp(makeOfficerDeps());
     const response = await request(app)
       .get('/v1/officer/tickets/SMD-XX-00000')
       .set('Authorization', 'Bearer valid-officer-token');
     expect(response.status).toBe(404);
-    expect(response.body.code).toBe('TIKET_TIDAK_DITEMUKAN');
+    expect(response.body.code).toBe('TICKET_NOT_FOUND');
     expect(response.body.title).toBe('Ticket not found');
   });
 
