@@ -1,4 +1,4 @@
-const { LoggerBuilder, logRequest, unifyResponse, preHandler } = require('../common');
+const { LoggerBuilder, logRequest, unifyResponse } = require('../common');
 
 describe('platform common (local shim)', () => {
   it('LoggerBuilder returns a chainable logger that writes to console', () => {
@@ -21,11 +21,5 @@ describe('platform common (local shim)', () => {
   it('logRequest returns no extra metadata and unifyResponse returns undefined', () => {
     expect(logRequest()).toEqual({});
     expect(unifyResponse()).toBeUndefined();
-  });
-
-  it('preHandler passes through to next', () => {
-    const next = jest.fn();
-    preHandler({}, {}, next);
-    expect(next).toHaveBeenCalledTimes(1);
   });
 });

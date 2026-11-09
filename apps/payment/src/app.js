@@ -43,7 +43,7 @@ function createApp({ config, platform = defaultPlatform, isReady, deps } = {}) {
 
   // The container builds the adapters + use cases (composition root);
   // the presentation layer only mounts the routes onto them.
-  const paymentDeps = deps || (config ? buildPaymentDeps(config) : null);
+  const paymentDeps = deps || buildPaymentDeps(config);
   mountRoutes(app, { platform, isReady, config, deps: paymentDeps });
   app.use(notFound);
   app.use(createErrorHandler({ platform }));

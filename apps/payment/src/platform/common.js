@@ -10,9 +10,6 @@
  *   falls back to the raw payload then, which matches how this
  *   service's controllers respond (they set `skipResponseEnvelope`
  *   and return `{ data }`).
- * - `preHandler`, a pass-through: this mock serves unauthenticated
- *   verification endpoints, so platform authentication is never
- *   enabled (`usePlatformPreHandler` stays false).
  */
 function createLogger() {
   const logger = {
@@ -37,8 +34,4 @@ function unifyResponse() {
   return undefined;
 }
 
-function preHandler(_request, _response, next) {
-  next();
-}
-
-module.exports = { LoggerBuilder, logRequest, unifyResponse, preHandler };
+module.exports = { LoggerBuilder, logRequest, unifyResponse };
