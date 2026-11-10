@@ -1,12 +1,15 @@
 require('./alias');
 
 const express = require('express');
+const helmet = require('helmet');
+const cors = require('cors');
 const defaultPlatform = require('@/platform/common');
-const { createDuplicateKeyVerifier } = require('@/middleware/duplicate-json-keys');
-const { createResponseMiddleware } = require('@/middleware/response');
-const { createErrorHandler } = require('@/middleware/error-handler');
-const { notFound } = require('@/middleware/not-found');
-const { mountRoutes } = require('@/routes');
+const { createDuplicateKeyVerifier } = require('@/presentation/http/middleware/duplicate-json-keys');
+const { createResponseMiddleware } = require('@/presentation/http/middleware/response');
+const { createErrorHandler } = require('@/presentation/http/middleware/error-handler');
+const { notFound } = require('@/presentation/http/middleware/not-found');
+const { mountRoutes } = require('@/presentation/http/routes');
+const { createDefaultDeps } = require('@/container');
 
 /**
  * Builds an Express application without binding a network port or starting jobs.
@@ -15,13 +18,22 @@ const { mountRoutes } = require('@/routes');
  * @param {object} options.config - Validated service configuration.
  * @param {object} [options.platform] - Platform helper implementation.
  * @param {Function} [options.isReady] - Optional readiness predicate.
+ * @param {Function} [options.isShuttingDown] - Optional shutdown predicate (for /readyz).
+ * @param {object} [options.deps] - Pre-built dependency graph (createDeps).
+ *   When omitted, the default (in-memory) graph is built from the config.
  * @returns {import('express').Express} Configured Express application.
  */
-function createApp({ config, platform = defaultPlatform, isReady } = {}) {
+function createApp({ config, platform = defaultPlatform, isReady, isShuttingDown, deps } = {}) {
   if (!config) throw new Error('createApp requires validated configuration');
 
   const app = express();
   app.disable('x-powered-by');
+  // Security headers (helmet, defaults) + CORS. Both run before the routes
+  // are mounted. The CORS allowlist is config.corsOrigins (CORS_ORIGINS env,
+  // comma-separated; defaults to the production web + local dev origins).
+  // This is a JSON-only API (no HTML is rendered), so helmet's defaults fit.
+  app.use(helmet());
+  app.use(cors({ origin: config.corsOrigins }));
   app.use(createResponseMiddleware({ platform }));
   app.use(
     express.json({
@@ -31,7 +43,13 @@ function createApp({ config, platform = defaultPlatform, isReady } = {}) {
   );
   app.use(express.urlencoded({ extended: true, limit: config.bodyLimit }));
 
-  mountRoutes(app, { platform, isReady });
+  const mounted = mountRoutes(app, {
+    config,
+    isReady,
+    isShuttingDown,
+    deps: deps || createDefaultDeps(config)
+  });
+  app.locals.deps = mounted.deps;
   app.use(notFound);
   app.use(createErrorHandler({ platform }));
 

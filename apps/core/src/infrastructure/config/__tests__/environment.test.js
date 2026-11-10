@@ -1,0 +1,36 @@
+const { loadEnvironment, DEFAULT_CORS_ORIGINS } = require('../environment');
+
+describe('loadEnvironment', () => {
+  it('defaults the port for this service', () => {
+    expect(loadEnvironment({}).port).toBe(8082);
+  });
+
+  it('rejects an invalid port', () => {
+    expect(() => loadEnvironment({ PORT: 'not-a-port' })).toThrow('Invalid environment configuration');
+  });
+
+  it('defaults CORS_ORIGINS to the production web + local dev origins', () => {
+    expect(loadEnvironment({}).corsOrigins).toEqual(DEFAULT_CORS_ORIGINS);
+    expect(DEFAULT_CORS_ORIGINS).toEqual([
+      'https://rusuh-tiket.web.id',
+      'https://www.rusuh-tiket.web.id',
+      'http://localhost:3000',
+      'http://localhost:5173'
+    ]);
+  });
+
+  it('parses a comma-separated CORS_ORIGINS into an array', () => {
+    const config = loadEnvironment({ CORS_ORIGINS: 'https://a.example.com,https://b.example.com' });
+    expect(config.corsOrigins).toEqual(['https://a.example.com', 'https://b.example.com']);
+  });
+
+  it('trims whitespace and drops empty CORS_ORIGINS entries', () => {
+    const config = loadEnvironment({ CORS_ORIGINS: '  https://a.example.com , , https://b.example.com  ' });
+    expect(config.corsOrigins).toEqual(['https://a.example.com', 'https://b.example.com']);
+  });
+
+  it('falls back to the defaults when CORS_ORIGINS is empty', () => {
+    expect(loadEnvironment({ CORS_ORIGINS: '' }).corsOrigins).toEqual(DEFAULT_CORS_ORIGINS);
+    expect(loadEnvironment({ CORS_ORIGINS: '   ' }).corsOrigins).toEqual(DEFAULT_CORS_ORIGINS);
+  });
+});

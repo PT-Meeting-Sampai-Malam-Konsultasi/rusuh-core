@@ -68,7 +68,8 @@ cd apps/admin && npm start        # 8086
    (`POST /v1/admin/events`), or insert one directly into Postgres
    (`events` + `categories` tables) — the admin module is the supported path.
 3. Walk the journey: events → attendees/validate (NIK `3171010101900001`,
-   a synthetic Dukcapil-mock NIK) → bookings → payment (Snap sandbox) →
+   a synthetic Dukcapil-mock NIK — the mock verifies format only, so any
+   format-valid 16-digit NIK passes) → bookings → payment (Snap sandbox) →
    webhook → tickets → officer scan.
 
 ## Notes and limits

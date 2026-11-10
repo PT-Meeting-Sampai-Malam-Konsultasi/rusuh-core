@@ -3,19 +3,28 @@ require('dotenv').config();
 
 const http = require('http');
 const defaultPlatform = require('@/platform/common');
-const { loadEnvironment } = require('@/config/environment');
+const { loadEnvironment } = require('@/infrastructure/config/environment');
 const { createApp } = require('@/app');
+const { createDeps } = require('@/container');
 
 /**
  * Starts the HTTP server and registers controlled shutdown handlers.
+ * Builds the dependency graph first (real Postgres/Valkey/SQS when their
+ * URLs are configured, in-memory otherwise), then starts the sweeper.
  *
- * @returns {http.Server} Active HTTP server.
+ * @returns {Promise<http.Server>} Active HTTP server.
  */
-function startServer() {
+async function startServer() {
   const config = loadEnvironment();
-  const app = createApp({ config });
-  const server = http.createServer(app);
+  const deps = await createDeps(config);
+  // Declared before createApp so /readyz can read it: once shutdown starts
+  // (SIGTERM), /readyz answers 503 so the ALB stops sending new requests.
   let shuttingDown = false;
+  const app = createApp({ config, deps, isShuttingDown: () => shuttingDown });
+  const server = http.createServer(app);
+
+  // Background worker (D9 sweeper).
+  deps.sweeper.start();
 
   /**
    * Stops accepting connections and exits after cleanup or the configured deadline.
@@ -29,6 +38,9 @@ function startServer() {
 
     const logger = defaultPlatform.LoggerBuilder?.getLogger?.();
     logger?.addTags?.(['server', 'shutdown'])?.addData?.({ signal })?.info?.('Graceful shutdown started');
+
+    deps.sweeper.stop();
+    Promise.all([deps.store.close(), deps.stock.close()]).catch(() => {});
 
     const timeout = setTimeout(() => process.exit(1), config.gracefulShutdownTimeoutMs);
     timeout.unref();
@@ -65,6 +77,11 @@ function startServer() {
   return server;
 }
 
-if (require.main === module) startServer();
+if (require.main === module) {
+  startServer().catch((error) => {
+    console.error('[core] failed to start:', error.message);
+    process.exit(1);
+  });
+}
 
 module.exports = { startServer };

@@ -1,5 +1,5 @@
 const request = require('supertest');
-const { loadEnvironment } = require('./config/environment');
+const { loadEnvironment } = require('./infrastructure/config/environment');
 const { createApp } = require('./app');
 
 describe('core service', () => {
@@ -21,6 +21,19 @@ describe('core service', () => {
     const response = await request(app).get('/health/ready');
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ status: 'ready' });
+  });
+
+  it('GET /readyz returns ok while serving', async () => {
+    const response = await request(app).get('/readyz');
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ status: 'ok' });
+  });
+
+  it('GET /readyz returns 503 once shutdown has started', async () => {
+    const draining = createApp({ config: loadEnvironment({}), isShuttingDown: () => true });
+    const response = await request(draining).get('/readyz');
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual({ status: 'not_ready' });
   });
 
   it('unknown route returns 404', async () => {
