@@ -42,9 +42,10 @@ const environmentSchema = Joi.object({
   AUTH_JWKS: Joi.string().allow(''),
   AUTH_AUDIENCE: Joi.string().default('rusuh-api'),
   AUTH_ISSUER: Joi.string().default('rusuh-auth'),
-  // Fees (LLD-02 §8, config).
+  // Fees (LLD-02 §8, config). Admin fee default 0: TBD from the official
+  // Midtrans merchant tariff — not invented (see @rusuh/contracts fee kernel).
   PLATFORM_FEE_IDR: Joi.number().integer().min(0).default(30000),
-  ADMIN_FEE_IDR: Joi.number().integer().min(0).default(15000),
+  ADMIN_FEE_IDR: Joi.number().integer().min(0).default(0),
   PPN_RATE: Joi.number().min(0).max(1).default(0.11),
   TAX2_RATE: Joi.number().min(0).max(1).default(0),
   TAX2_BASE: Joi.number().integer().valid(0, 1, 2).default(0),

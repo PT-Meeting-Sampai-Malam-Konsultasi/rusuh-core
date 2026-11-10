@@ -28,7 +28,7 @@ describe('bookings journey (D5)', () => {
   it('runs the full journey: validate -> SELECTION -> PAYMENT_PENDING -> PAID -> tickets', async () => {
     const { app, admissionToken, accountToken } = await createTestApp({
       payment: {
-        status: { status: 'settlement', grossAmount: 1548300, transactionId: 'txn_1', paymentType: 'gopay' }
+        status: { status: 'settlement', grossAmount: 1533300, transactionId: 'txn_1', paymentType: 'gopay' }
       }
     });
     const headers = { Authorization: `Bearer ${accountToken}`, 'X-Admission-Token': admissionToken };
@@ -45,7 +45,7 @@ describe('bookings journey (D5)', () => {
       orderCode: expect.stringMatching(/^RSH-\d{2}-\d{6}$/)
     });
     expect(create.body.price.ticketSubtotal).toEqual({ amount: 1500000, currency: 'IDR' });
-    expect(create.body.price.total).toEqual({ amount: 1548300, currency: 'IDR' });
+    expect(create.body.price.total).toEqual({ amount: 1533300, currency: 'IDR' });
     expect(create.body.attendees[0].nikMasked).toBe('3171 •••• •••• 0001');
     const { bookingId } = create.body;
 
@@ -180,7 +180,7 @@ describe('bookings journey (D5)', () => {
       .send({
         orderId: `${bookingId}-1`,
         transactionStatus: 'settlement',
-        grossAmount: 1548300,
+        grossAmount: 1533300,
         transactionId: 'txn_9'
       });
     expect(bad.status).toBe(401);
@@ -191,7 +191,7 @@ describe('bookings journey (D5)', () => {
       .send({
         orderId: `${bookingId}-1`,
         transactionStatus: 'settlement',
-        grossAmount: 1548300,
+        grossAmount: 1533300,
         transactionId: 'txn_9'
       });
     expect(result.status).toBe(200);
@@ -204,7 +204,7 @@ describe('bookings journey (D5)', () => {
       .send({
         orderId: `${bookingId}-1`,
         transactionStatus: 'settlement',
-        grossAmount: 1548300,
+        grossAmount: 1533300,
         transactionId: 'txn_9'
       });
     expect(duplicate.body.handled).toBe(true);

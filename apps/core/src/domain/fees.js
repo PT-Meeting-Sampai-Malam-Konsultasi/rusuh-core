@@ -1,9 +1,9 @@
+const { fees: feeKernel } = require('@rusuh/contracts');
+
 /**
- * Fee computation (LLD-02 §8, decided 1 Nov).
- *  total = Σ(price × qty) + platform fee + admin fee + tax1 + tax2
- *  tax1 = PPN 11% × platform fee (admin fee is NOT taxed).
- *  tax2 = config rate × base, default 0; shown only when > 0.
- * All amounts are integer IDR; tax is rounded half-up.
+ * Price computation for core-module (LLD-02 §8). The arithmetic lives in
+ * @rusuh/contracts (fee kernel, shared with admin-module); this module maps
+ * the kernel result to the API shapes.
  *
  * Response mapping (openapi.yaml PriceBreakdown): the yaml has one `adminFee`
  * line and one optional `tax` line, so the platform fee + admin fee are
@@ -13,67 +13,58 @@
  * and separate tax1/tax2 — flagged in the module report.
  */
 
-function money(amount) {
-  return { amount, currency: 'IDR' };
-}
-
-function roundHalfUp(value) {
-  return Math.round(value);
-}
-
 /**
  * Computes the price breakdown for an order.
  *
  * @param {Array<{categoryId: string, name: string, quantity: number, unitPrice: number}>} lines
  *   Ticket lines (unit price in IDR).
- * @param {object} fees - Fee config.
- * @param {number} fees.platformFee - Flat per transaction (default 30000).
- * @param {number} fees.adminFee - Flat per transaction (default 15000).
+ * @param {object} fees - Fee config (LLD-02 §8; kernel defaults apply per field).
+ * @param {number} [fees.platformFee] - Flat per transaction (default 30000, Q21).
+ * @param {number} [fees.adminFee] - Flat per transaction (default 0, TBD from the Midtrans tariff).
  * @param {number} [fees.ppnRate] - PPN rate on the platform fee (default 0.11).
  * @param {number} [fees.tax2Rate] - Second-tax rate (default 0).
- * @param {number} [fees.tax2Base] - Second-tax base: 0 = off, 1 = ticket subtotal, 2 = platform fee.
+ * @param {number} [fees.tax2Base] - 1 = ticket subtotal, anything else = platform fee.
  * @param {string} [fees.tax2Label] - Second-tax label (default "Pajak Lainnya").
  * @returns {object} PriceBreakdown (yaml shape) + feeBreakdown (internal split).
  */
-function computePrice(lines, fees) {
-  const platformFee = fees.platformFee ?? 30000;
-  const adminFee = fees.adminFee ?? 15000;
-  const ppnRate = fees.ppnRate ?? 0.11;
-  const tax2Rate = fees.tax2Rate ?? 0;
-  const tax2Base = fees.tax2Base ?? 0;
-  const tax2Label = fees.tax2Label ?? 'Pajak Lainnya';
-
+function computePrice(lines, fees = {}) {
   const pricedLines = lines.map((line) => ({
     categoryId: line.categoryId,
     name: line.name,
     quantity: line.quantity,
-    unitPrice: money(line.unitPrice),
-    lineTotal: money(line.unitPrice * line.quantity)
+    unitPrice: { amount: line.unitPrice, currency: 'IDR' },
+    lineTotal: { amount: line.unitPrice * line.quantity, currency: 'IDR' }
   }));
   const ticketSubtotal = pricedLines.reduce((sum, line) => sum + line.lineTotal.amount, 0);
 
-  const tax1 = roundHalfUp(platformFee * ppnRate);
-  const tax2Amount = tax2Rate > 0 ? roundHalfUp((tax2Base === 1 ? ticketSubtotal : platformFee) * tax2Rate) : 0;
-  const tax = tax1 + tax2Amount;
-  const serviceFee = platformFee + adminFee;
-  const total = ticketSubtotal + serviceFee + tax;
+  const breakdown = feeKernel.computeFeeBreakdown({
+    subtotal: ticketSubtotal,
+    platformFee: fees.platformFee,
+    adminFee: fees.adminFee,
+    tax1Rate: fees.ppnRate,
+    tax2Rate: fees.tax2Rate,
+    // Env keeps the numeric TAX2_BASE codes (0/1/2); the kernel speaks strings.
+    tax2Base: fees.tax2Base === 1 ? 'subtotal' : 'platform_fee',
+    tax2Label: fees.tax2Label
+  });
+  const tax = breakdown.tax1 + breakdown.tax2;
 
-  const breakdown = {
+  const result = {
     lines: pricedLines,
-    ticketSubtotal: money(ticketSubtotal),
-    adminFee: money(serviceFee),
-    total: money(total)
+    ticketSubtotal: { amount: ticketSubtotal, currency: 'IDR' },
+    adminFee: { amount: breakdown.serviceFee, currency: 'IDR' }
   };
-  if (tax > 0) breakdown.tax = money(tax);
+  if (tax > 0) result.tax = { amount: tax, currency: 'IDR' };
+  result.total = { amount: breakdown.total, currency: 'IDR' };
 
   return {
-    ...breakdown,
+    ...result,
     feeBreakdown: {
-      platformFee: money(platformFee),
-      adminFee: money(adminFee),
-      tax1: money(tax1),
-      tax2: money(tax2Amount),
-      tax2Label: tax2Amount > 0 ? tax2Label : null
+      platformFee: { amount: breakdown.platformFee, currency: 'IDR' },
+      adminFee: { amount: breakdown.adminFee, currency: 'IDR' },
+      tax1: { amount: breakdown.tax1, currency: 'IDR' },
+      tax2: { amount: breakdown.tax2, currency: 'IDR' },
+      tax2Label: breakdown.tax2 > 0 ? breakdown.tax2Label : null
     }
   };
 }

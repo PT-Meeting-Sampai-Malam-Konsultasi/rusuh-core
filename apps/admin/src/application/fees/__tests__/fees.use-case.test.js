@@ -47,6 +47,14 @@ describe('calculateFees', () => {
     expect(result.tax2).toBe(3000);
     expect(result.tax2_label).toBe('PBJT Hiburan');
   });
+
+  it('matches the core-module kernel: a missing platform_fee is the Q21 default, never 0', () => {
+    const result = calculateFees(500000, {});
+    expect(result.platform_fee).toBe(30000);
+    expect(result.admin_fee).toBe(0);
+    expect(result.tax1).toBe(3300);
+    expect(result.total).toBe(500000 + 30000 + 3300);
+  });
 });
 
 describe('createFeesUseCase', () => {

@@ -72,4 +72,13 @@ describe('fees (LLD-02 §8)', () => {
     expect(result.ticketSubtotal.amount).toBe(0);
     expect(result.total.amount).toBe(30000 + 15000 + 3300);
   });
+
+  it('applies the shared kernel defaults when no fee config is given', () => {
+    // Platform fee 30000 (Q21); admin fee 0 — TBD from the Midtrans tariff,
+    // same kernel @rusuh/contracts the admin-module preview uses.
+    const result = computePrice([{ categoryId: 'cat_tribune', name: 'Tribun', quantity: 1, unitPrice: 100000 }]);
+    expect(result.feeBreakdown.platformFee.amount).toBe(30000);
+    expect(result.feeBreakdown.adminFee.amount).toBe(0);
+    expect(result.total.amount).toBe(100000 + 30000 + 3300);
+  });
 });
