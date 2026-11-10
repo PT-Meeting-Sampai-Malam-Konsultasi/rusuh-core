@@ -1,12 +1,14 @@
 require('./alias');
 
 const express = require('express');
+const helmet = require('helmet');
+const cors = require('cors');
 const defaultPlatform = require('@/platform/common');
-const { createDuplicateKeyVerifier } = require('@/middleware/duplicate-json-keys');
-const { createResponseMiddleware } = require('@/middleware/response');
-const { createErrorHandler } = require('@/middleware/error-handler');
-const { notFound } = require('@/middleware/not-found');
-const { mountRoutes } = require('@/routes');
+const { createDuplicateKeyVerifier } = require('@/presentation/http/middleware/duplicate-json-keys');
+const { createResponseMiddleware } = require('@/presentation/http/middleware/response');
+const { createErrorHandler } = require('@/presentation/http/middleware/error-handler');
+const { notFound } = require('@/presentation/http/middleware/not-found');
+const { mountRoutes } = require('@/presentation/http/routes');
 
 /**
  * Builds an Express application without binding a network port or starting jobs.
@@ -22,6 +24,13 @@ function createApp({ config, platform = defaultPlatform, isReady } = {}) {
 
   const app = express();
   app.disable('x-powered-by');
+  // Security headers (helmet, defaults) + CORS. This service has no public
+  // endpoints (health-only HTTP), so CORS has no practical effect here —
+  // but helmet still protects the health endpoints, and the wiring stays
+  // consistent with the other services. Origins come from CORS_ORIGINS
+  // (config.corsOrigins); see .env.example for the default list.
+  app.use(helmet());
+  app.use(cors({ origin: config.corsOrigins }));
   app.use(createResponseMiddleware({ platform }));
   app.use(
     express.json({

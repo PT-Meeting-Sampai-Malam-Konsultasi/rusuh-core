@@ -3,22 +3,26 @@ require('dotenv').config();
 
 const http = require('http');
 const defaultPlatform = require('@/platform/common');
-const { loadEnvironment } = require('@/config/environment');
+const { loadEnvironment } = require('@/infrastructure/config/environment');
 const { createApp } = require('@/app');
+const { createContainer } = require('@/container');
 
 /**
- * Starts the HTTP server and registers controlled shutdown handlers.
+ * Starts the HTTP server (health endpoints only — this module has no public
+ * API) and the SQS worker (background consumer loop) alongside it.
  *
  * @returns {http.Server} Active HTTP server.
  */
 function startServer() {
   const config = loadEnvironment();
-  const app = createApp({ config });
+  const { worker } = createContainer({ config });
+  const app = createApp({ config, isReady: () => worker.isHealthy() });
   const server = http.createServer(app);
   let shuttingDown = false;
 
   /**
-   * Stops accepting connections and exits after cleanup or the configured deadline.
+   * Stops the worker (finishes in-flight messages) and the HTTP server,
+   * then exits after cleanup or the configured deadline.
    *
    * @param {string} signal - Process signal that initiated shutdown.
    * @returns {void}
@@ -32,10 +36,15 @@ function startServer() {
 
     const timeout = setTimeout(() => process.exit(1), config.gracefulShutdownTimeoutMs);
     timeout.unref();
-    server.close(() => {
-      clearTimeout(timeout);
-      process.exit(0);
-    });
+    worker
+      .stop(config.gracefulShutdownTimeoutMs)
+      .catch(() => {})
+      .finally(() => {
+        server.close(() => {
+          clearTimeout(timeout);
+          process.exit(0);
+        });
+      });
   }
 
   process.once('SIGTERM', () => shutdown('SIGTERM'));
@@ -60,6 +69,12 @@ function startServer() {
       .addTags?.(['server', 'listen'])
       ?.addData?.({ port: config.port })
       ?.info?.('Server started');
+    worker.start().catch((error) => {
+      defaultPlatform.LoggerBuilder?.getLogger?.()
+        .addTags?.(['worker', 'start'])
+        ?.addData?.({ error: error.message })
+        ?.error?.('Worker failed to start (health endpoints still serve)');
+    });
   });
 
   return server;

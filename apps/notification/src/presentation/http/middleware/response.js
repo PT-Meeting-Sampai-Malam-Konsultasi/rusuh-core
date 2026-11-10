@@ -1,4 +1,4 @@
-const defaultPlatform = require('@/platform/common');
+const fallbackPlatform = require('./fallback-platform');
 
 /**
  * Creates middleware that applies the platform response envelope and logs completion.
@@ -7,7 +7,7 @@ const defaultPlatform = require('@/platform/common');
  * @param {object} [options.platform] - Platform helper implementation.
  * @returns {Function} Express middleware.
  */
-function createResponseMiddleware({ platform = defaultPlatform } = {}) {
+function createResponseMiddleware({ platform = fallbackPlatform } = {}) {
   return (request, response, next) => {
     const originalSend = response.send.bind(response);
     let responseLogged = false;

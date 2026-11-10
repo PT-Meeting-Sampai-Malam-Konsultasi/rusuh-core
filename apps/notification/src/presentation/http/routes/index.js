@@ -1,6 +1,6 @@
-const { createHealthService } = require('@/modules/health/health.service');
-const { createHealthController } = require('@/modules/health/health.controller');
-const { createHealthRouter } = require('@/modules/health/health.route');
+const { createHealthUseCase } = require('@/application/health/health.use-case');
+const { createHealthController } = require('../controllers/health.controller');
+const { createHealthRouter } = require('./health.route');
 
 /**
  * Mounts service routers and returns the reusable module dependencies.
@@ -11,7 +11,7 @@ const { createHealthRouter } = require('@/modules/health/health.route');
  * @returns {object} Mounted service modules.
  */
 function mountRoutes(app, { isReady } = {}) {
-  const healthService = createHealthService({ isReady });
+  const healthService = createHealthUseCase({ isReady });
   const healthController = createHealthController(healthService);
 
   app.use(createHealthRouter(healthController));
