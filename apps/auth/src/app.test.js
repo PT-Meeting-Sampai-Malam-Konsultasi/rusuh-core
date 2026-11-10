@@ -1,5 +1,5 @@
 const request = require('supertest');
-const { loadEnvironment } = require('./config/environment');
+const { loadEnvironment } = require('./infrastructure/config/environment');
 const { createApp } = require('./app');
 
 describe('auth service', () => {
