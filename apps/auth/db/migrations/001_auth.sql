@@ -2,7 +2,7 @@
 -- Apply: psql "$DATABASE_URL" -f db/migrations/001_auth.sql
 
 CREATE TABLE IF NOT EXISTS accounts (
-  id TEXT PRIMARY KEY,
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   email TEXT UNIQUE NOT NULL,
   profile_complete BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS profiles (
 
 -- OTP challenges (ADR-0006: HMAC + device-bound, hash only, single-use).
 CREATE TABLE IF NOT EXISTS otp_codes (
-  id TEXT PRIMARY KEY,
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   email TEXT NOT NULL,
   code_hash TEXT NOT NULL,
   device_id TEXT,
@@ -35,7 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_otp_codes_email_created ON otp_codes (email, crea
 
 -- Opaque refresh tokens (Q44: SHA-256 hash only, rotation + reuse detection).
 CREATE TABLE IF NOT EXISTS refresh_tokens (
-  id TEXT PRIMARY KEY,
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   account_id TEXT NOT NULL REFERENCES accounts (id) ON DELETE CASCADE,
   family_id TEXT NOT NULL,
   token_hash TEXT UNIQUE NOT NULL,
@@ -68,3 +68,11 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_audit_log_account ON audit_log (account_id, created_at DESC);
+
+-- Idempotent migration for databases created before the id defaults existed.
+-- The Postgres store inserts without id (RETURNING *), so the defaults above
+-- must also exist on pre-existing tables. gen_random_uuid() is built-in since
+-- PostgreSQL 13 (no pgcrypto extension needed). Safe to re-run.
+ALTER TABLE accounts ALTER COLUMN id SET DEFAULT gen_random_uuid()::text;
+ALTER TABLE otp_codes ALTER COLUMN id SET DEFAULT gen_random_uuid()::text;
+ALTER TABLE refresh_tokens ALTER COLUMN id SET DEFAULT gen_random_uuid()::text;
