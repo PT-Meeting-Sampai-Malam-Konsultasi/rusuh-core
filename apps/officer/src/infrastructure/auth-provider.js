@@ -7,23 +7,26 @@ const { apiError } = require('@/domain/errors');
  * - Account JWTs are verified LOCALLY with @rusuh/auth (Ed25519, Q43); the
  *   public keys come from AUTH_PUBLIC_KEYS_JSON ({ kid: JWK }) — published by
  *   auth-module. No hot-path call to auth-module.
+ * - The jti denylist (Valkey, Q42 logout revocation) is consulted when a
+ *   denylist is provided, so a logged-out account cannot scan at the gate.
+ *   Fail-closed: when the denylist is unreachable the request fails with 503
+ *   instead of accepting a possibly-revoked token (same rule as auth-module,
+ *   LLD-01 §6.3).
  * - The officer ROLE is resolved server-side from accounts.role (LLD-05 §2),
  *   never from JWT claims (Q42: claims are sub/iat/exp/jti/kid only).
- *
- * GAP (noted in README): the jti denylist (Valkey, Q42 logout revocation) is
- * not wired here yet — there is no Valkey client in this module. Until it is
- * wired, verification covers signature + expiry + audience/issuer only. The
- * auth-module story branch owns the JWKS/denylist publication; this module
- * consumes them via config.
  */
 
 /**
  * Builds the default token verifier from config.
  *
  * @param {object} config - Service config (authPublicKeys: Map kid -> JWK).
- * @returns {Function} Async (token) => payload; throws 401 UNAUTHORIZED.
+ * @param {object} [denylist] - jti denylist ({ isDenied }); omitted in dev
+ *   mode (no VALKEY_URL) — verification then covers signature + expiry +
+ *   audience/issuer only.
+ * @returns {Function} Async (token) => payload; throws 401 UNAUTHORIZED /
+ *   503 SERVICE_UNAVAILABLE.
  */
-function createDefaultVerifyToken(config) {
+function createDefaultVerifyToken(config, denylist) {
   return async (token) => {
     if (!config.authPublicKeys || config.authPublicKeys.size === 0) {
       throw apiError('UNAUTHORIZED', 'Account token verification is not configured');
@@ -32,10 +35,13 @@ function createDefaultVerifyToken(config) {
       return await verifyAccountToken(token, {
         publicKeys: config.authPublicKeys,
         expectedAud: config.authAudience,
-        expectedIss: config.authIssuer
-        // isDenied: Valkey denylist lookup — TODO when the Valkey client lands.
+        expectedIss: config.authIssuer,
+        ...(denylist ? { isDenied: (jti) => denylist.isDenied(jti) } : {})
       });
     } catch (error) {
+      if (error && error.code === 'DENYLIST_UNAVAILABLE') {
+        throw apiError('SERVICE_UNAVAILABLE', 'Token verification is unavailable, try again');
+      }
       if (error && error.code === 'UNAUTHORIZED') throw apiError('UNAUTHORIZED', error.message);
       throw error;
     }

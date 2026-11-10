@@ -58,6 +58,30 @@ describe('createDefaultVerifyToken', () => {
     const token = sign({ aud: 'other-api' });
     await expect(verifyToken(token)).rejects.toMatchObject({ data: { code: 'UNAUTHORIZED' } });
   });
+
+  it('throws 401 UNAUTHORIZED for a denylisted jti (Q42 logout revocation)', async () => {
+    const denylist = { isDenied: async (jti) => jti === 'jti-logged-out' };
+    const verifyToken = createDefaultVerifyToken({ authPublicKeys: new Map([[kid, publicJwk]]) }, denylist);
+    const token = sign({ jti: 'jti-logged-out' });
+    await expect(verifyToken(token)).rejects.toMatchObject({ data: { code: 'UNAUTHORIZED' } });
+    // A live jti on the same key still verifies.
+    await expect(verifyToken(sign({ jti: 'jti-live' }))).resolves.toMatchObject({ sub: 'acc_officer_1' });
+  });
+
+  it('fails closed with 503 SERVICE_UNAVAILABLE when the denylist is unreachable', async () => {
+    const denylist = {
+      isDenied: async () => {
+        const error = new Error('connection refused');
+        error.code = 'DENYLIST_UNAVAILABLE';
+        throw error;
+      }
+    };
+    const verifyToken = createDefaultVerifyToken({ authPublicKeys: new Map([[kid, publicJwk]]) }, denylist);
+    await expect(verifyToken(sign())).rejects.toMatchObject({
+      data: { code: 'SERVICE_UNAVAILABLE' },
+      status: 503
+    });
+  });
 });
 
 describe('createPostgresRoleResolver', () => {

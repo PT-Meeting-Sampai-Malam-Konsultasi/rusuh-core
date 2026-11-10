@@ -7,6 +7,9 @@ const environmentSchema = Joi.object({
   ENABLE_DUPLICATE_JSON_KEY_VALIDATION: Joi.boolean().truthy('true').falsy('false').default(false),
   GRACEFUL_SHUTDOWN_TIMEOUT_MS: Joi.number().integer().positive().default(10000),
   DATABASE_URL: Joi.string().optional(),
+  // jti denylist (Q42): when unset, token verification covers signature +
+  // expiry + audience/issuer only (dev mode; logout revocation is not seen).
+  VALKEY_URL: Joi.string().uri().allow('').optional(),
   NIK_ENCRYPTION_KEY: Joi.string().optional(),
   AUTH_PUBLIC_KEYS_JSON: Joi.string().optional(),
   AUTH_AUDIENCE: Joi.string().optional(),
@@ -85,6 +88,7 @@ function loadEnvironment(environment = process.env) {
     enableDuplicateJsonKeyValidation: value.ENABLE_DUPLICATE_JSON_KEY_VALIDATION,
     gracefulShutdownTimeoutMs: value.GRACEFUL_SHUTDOWN_TIMEOUT_MS,
     databaseUrl: value.DATABASE_URL || null,
+    valkeyUrl: value.VALKEY_URL || null,
     nikEncryptionKey: value.NIK_ENCRYPTION_KEY || null,
     authPublicKeys: parsePublicKeys(value.AUTH_PUBLIC_KEYS_JSON),
     authAudience: value.AUTH_AUDIENCE || null,

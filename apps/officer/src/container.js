@@ -15,6 +15,7 @@ const { createRequireRole } = require('@/presentation/http/middleware/auth');
 const { createDefaultVerifyToken, createPostgresRoleResolver } = require('@/infrastructure/auth-provider');
 const { createPostgresTicketStore, createPool } = require('@/infrastructure/persistence/ticket-store');
 const { createPostgresAuditStore } = require('@/infrastructure/persistence/audit-store');
+const { createValkeyDenylist } = require('@/infrastructure/cache/valkey-denylist');
 const { createNikCrypto } = require('@/domain/nik');
 const { apiError } = require('@/domain/errors');
 
@@ -36,6 +37,10 @@ function buildOfficerDeps(config) {
     ? createPostgresTicketStore(pool)
     : { findByCodeOrId: unavailable, findEvent: unavailable, markUsed: unavailable, listByEvent: unavailable };
   const auditStore = pool ? createPostgresAuditStore(pool) : { insert: unavailable, list: unavailable };
+  const denylist = config.valkeyUrl ? createValkeyDenylist({ valkeyUrl: config.valkeyUrl }) : null;
+  if (!denylist && config.nodeEnv !== 'test') {
+    console.warn('[officer] VALKEY_URL not set: jti denylist is off (logout does not revoke gate tokens).');
+  }
   const nikCrypto = config.nikEncryptionKey
     ? createNikCrypto({ key: config.nikEncryptionKey })
     : {
@@ -46,10 +51,10 @@ function buildOfficerDeps(config) {
           throw new Error('NIK_ENCRYPTION_KEY is not configured');
         }
       };
-  const verifyToken = createDefaultVerifyToken(config);
+  const verifyToken = createDefaultVerifyToken(config, denylist);
   const roleResolver = pool ? createPostgresRoleResolver(pool) : async () => null;
 
-  return { ticketStore, auditStore, nikCrypto, verifyToken, roleResolver };
+  return { ticketStore, auditStore, nikCrypto, verifyToken, roleResolver, denylist };
 }
 
 /**
