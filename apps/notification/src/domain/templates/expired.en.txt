@@ -1,0 +1,15 @@
+Subject: Your {{event_name}} order was cancelled — no charge
+
+The payment time ran out.
+
+The payment for order {{order_code}} wasn't finished by {{deadline}}, so we cancelled the order and released the tickets to other buyers. Nothing was charged.
+
+Event: {{event_name}}
+Order: {{order_code}}
+Total: {{total}}
+Pay by: {{deadline}}
+
+Still want to go? Queue again from the start, while tickets last. A new place in the queue starts at the back.
+Queue again: {{event_url}}
+
+Already paid? Don't worry: a payment that arrives after the deadline doesn't become a ticket, and we'll send a separate e-mail saying your money will be refunded.

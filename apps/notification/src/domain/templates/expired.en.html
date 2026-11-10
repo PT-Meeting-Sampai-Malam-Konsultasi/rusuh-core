@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="color-scheme" content="light only">
+<meta name="supported-color-schemes" content="light">
+<title>Your {{event_name}} order was cancelled — no charge</title>
+<style>
+  body { margin:0; padding:0; background:#F2EEE3; }
+  a { color:#141414; }
+  @media (max-width:620px) {
+    .wrap { padding:16px 10px 28px !important; }
+    .card { padding:24px 18px 22px !important; }
+    .shout { font-size:36px !important; }
+    .poster-title { font-size:44px !important; }
+    .code { font-size:38px !important; letter-spacing:6px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#F2EEE3">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#F2EEE3">The payment wasn't finished within 10 minutes. The tickets were released and nothing was charged.&#8203;&nbsp;&#8203;&nbsp;&#8203;&nbsp;&#8203;&nbsp;</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F2EEE3" style="background:#F2EEE3">
+<tr><td align="center" class="wrap" style="padding:28px 16px 40px">
+ <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px">
+  <tr><td style="padding:0 2px 16px">
+   <a href="https://rusuh.id" style="font-family:'Arial Narrow','Helvetica Neue Condensed','Roboto Condensed','Arial',sans-serif;font-size:30px;font-weight:800;letter-spacing:-0.5px;color:#141414;text-decoration:none">RUSUH<span style="color:#D81F72">!</span></a>
+  </td></tr>
+  <tr><td class="card" bgcolor="#FBF9F3" style="background:#FBF9F3;border:3px solid #141414;border-right:7px solid #141414;border-bottom:7px solid #141414;padding:32px 32px 28px">
+<p style="margin:0 0 8px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:12px;line-height:1.4;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#4A4740">Order cancelled</p><h1 class="shout" style="margin:0 0 16px;font-family:'Arial Narrow','Helvetica Neue Condensed','Roboto Condensed','Arial',sans-serif;font-size:44px;line-height:1;font-weight:800;letter-spacing:-0.5px;color:#141414">The payment time ran out.</h1><p style="margin:0px 0 16px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:16px;line-height:1.5;color:#4A4740;font-weight:400;text-align:left">The payment for order <b style="color:#141414">{{order_code}}</b> wasn't finished by <b style="color:#141414">{{deadline}}</b>, so we cancelled the order and released the tickets to other buyers. <b style="color:#141414">Nothing was charged.</b></p><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;border-bottom:1px solid #CFC8B6"><tr><td style="padding:7px 0;border-top:1px solid #CFC8B6;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14px;color:#6B665E;width:42%;vertical-align:top">Event</td><td style="padding:7px 0;border-top:1px solid #CFC8B6;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14px;color:#141414;font-weight:600;text-align:right;vertical-align:top">{{event_name}}</td></tr><tr><td style="padding:7px 0;border-top:1px solid #CFC8B6;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14px;color:#6B665E;width:42%;vertical-align:top">Order</td><td style="padding:7px 0;border-top:1px solid #CFC8B6;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14px;color:#141414;font-weight:600;text-align:right;vertical-align:top">{{order_code}}</td></tr><tr><td style="padding:7px 0;border-top:1px solid #CFC8B6;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14px;color:#6B665E;width:42%;vertical-align:top">Total</td><td style="padding:7px 0;border-top:1px solid #CFC8B6;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14px;color:#141414;font-weight:600;text-align:right;vertical-align:top">{{total}}</td></tr><tr><td style="padding:7px 0;border-top:1px solid #CFC8B6;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14px;color:#6B665E;width:42%;vertical-align:top">Pay by</td><td style="padding:7px 0;border-top:1px solid #CFC8B6;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14px;color:#141414;font-weight:600;text-align:right;vertical-align:top">{{deadline}}</td></tr></table><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px"><tr><td bgcolor="#FBF9F3" style="background:#FBF9F3;border:2px solid #141414;padding:16px 18px"><p style="margin:0 0 6px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:12px;line-height:1.4;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#141414">Still want to go?</p><p style="margin:0px 0 4px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#4A4740;font-weight:400;text-align:left">Queue again from the start, while tickets last. A new place in the queue starts at the back.</p><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 8px"><tr><td bgcolor="#141414" style="background:#141414;border-right:4px solid #D81F72;border-bottom:4px solid #D81F72"><a href="{{event_url}}" style="display:inline-block;padding:15px 28px;font-family:'Arial Narrow','Helvetica Neue Condensed','Roboto Condensed','Arial',sans-serif;font-size:19px;font-weight:700;line-height:1;color:#F2EEE3;text-decoration:none">Queue again&nbsp;&rarr;</a></td></tr></table></td></tr></table><p style="margin:0px 0 0px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#6B665E;font-weight:400;text-align:left">Already paid? Don't worry: a payment that arrives after the deadline doesn't become a ticket, and we'll send a separate e-mail saying your money will be refunded.</p>
+  </td></tr>
+  <tr><td style="padding:22px 2px 0">
+   <p style="margin:0px 0 8px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#4A4740;font-weight:400;text-align:left">Need help? Reply to this e-mail or write to <a href="mailto:bantuan@rusuh.id" style="color:#4A4740">bantuan@rusuh.id</a>.</p>
+   <p style="margin:0px 0 8px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:12px;line-height:1.5;color:#6B665E;font-weight:400;text-align:left">We sent this to {{email}} because of activity on your Rusuh account. It is a service e-mail, so it is sent even if you don't get our news.</p>
+   <p style="margin:0px 0 0px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:12px;line-height:1.5;color:#6B665E;font-weight:400;text-align:left">PT Rusuh Tiket Indonesia &middot; Jakarta</p>
+  </td></tr>
+ </table>
+</td></tr>
+</table>
+</body>
+</html>

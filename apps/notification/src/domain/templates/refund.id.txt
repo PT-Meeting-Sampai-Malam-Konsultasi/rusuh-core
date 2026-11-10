@@ -1,0 +1,17 @@
+Subject: Pembayaran {{event_name}} terlambat — uang Anda akan kami kembalikan
+
+Pembayaran Anda masuk setelah batas waktu.
+
+Pembayaran {{total}} untuk pesanan {{order_code}} kami terima pukul {{paid_at}}, setelah batas bayar {{deadline}}. Saat itu pesanannya sudah dibatalkan, jadi tiket tidak bisa diterbitkan.
+
+Uang Anda akan kami kembalikan. Tim keuangan kami memproses pengembalian ke {{payment_method}} dalam {{refund_window}}. Anda tidak perlu melakukan apa-apa; kami kabari lagi saat dananya dikirim.
+
+Event: {{event_name}}
+Pesanan: {{order_code}}
+Jumlah: {{total}}
+Metode: {{payment_method}}
+Dibayar: {{paid_at}}
+Batas bayar: {{deadline}}
+ID transaksi: {{transaction_id}}
+
+Simpan email ini. Kalau perlu bertanya, sebutkan kode pesanan di bawah.

@@ -1,0 +1,22 @@
+Subject: E-tiket Anda: {{event_name}}
+
+Sampai jumpa!
+
+{{event_name}} — {{event_subtitle}}
+{{event_date}} · {{event_time}}
+{{venue}}
+
+Pembayaran untuk pesanan {{order_code}} sudah kami terima. Ini {{count}} tiket Anda — semuanya juga ada di halaman Tiket Saya dan PDF terlampir.
+
+{{#tickets}}- Tiket {{index}} dari {{count}}: {{category}} · {{holder_name}} · NIK {{nik_masked}} · {{ticket_code}} · {{gate}}
+{{/tickets}}
+
+Di pintu masuk: Tunjukkan QR dari e-tiket (halaman Tiket Saya atau PDF) dan KTP asli. Nama dan NIK harus sama dengan yang tertera di tiket. Pintu dibuka pukul {{doors_open_at}}.
+
+Lihat e-tiket: {{ticket_url}}
+Unduh semua (PDF): {{download_all_url}}
+
+Pesanan: {{order_code}}
+Dibayar: {{total}}
+Metode: {{payment_method}}
+Waktu bayar: {{paid_at}}

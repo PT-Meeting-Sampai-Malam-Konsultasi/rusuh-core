@@ -74,9 +74,6 @@ function createEmailUseCase({ logStore, sender, s3, config, logger = fallbackLog
 
       try {
         let extra = {};
-        if (job.type === 'EMAIL_EXPIRED') {
-          extra = { admin_email: job.variables.admin_email || config.adminEmail };
-        }
         let attachments = [];
         if (job.type === 'EMAIL_TICKET' && job.attachments.length > 0) {
           if (!config.s3.ticketBucket) throw new Error('S3 ticket bucket is not configured');

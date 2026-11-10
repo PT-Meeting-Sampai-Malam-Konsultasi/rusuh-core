@@ -1,101 +1,98 @@
+const fs = require('fs');
+const path = require('path');
+
 /**
- * Email templates (LLD-04 §5). Indonesian by default; final copy needs a
- * team/copy review. The OTP code is rendered into the body but NEVER logged.
+ * Email templates (rusuh-web#46 / FR-22-C1). The four designed e-mails
+ * (otp, ticket, expired, refund) live as bundled read-only assets in
+ * src/domain/templates — {name}.{locale}.{txt,html} — loaded once at module
+ * start. Reading bundled immutable assets at startup is not infrastructure
+ * I/O; this module stays a pure renderer. The OTP code is rendered into the
+ * body but NEVER logged.
  */
 
+const TEMPLATE_NAMES = {
+  EMAIL_OTP: 'otp',
+  EMAIL_TICKET: 'ticket',
+  EMAIL_EXPIRED: 'expired',
+  EMAIL_REFUND_FLAGGED: 'refund'
+};
+
+const LOCALES = ['id', 'en'];
+
+function loadTemplates() {
+  const templates = {};
+  Object.values(TEMPLATE_NAMES).forEach((name) => {
+    templates[name] = {};
+    LOCALES.forEach((locale) => {
+      const base = path.join(__dirname, 'templates', `${name}.${locale}`);
+      templates[name][locale] = {
+        text: fs.readFileSync(`${base}.txt`, 'utf8'),
+        html: fs.readFileSync(`${base}.html`, 'utf8')
+      };
+    });
+  });
+  return templates;
+}
+
+const TEMPLATES = loadTemplates();
+
+/**
+ * Escapes a value for safe insertion into HTML text and attribute context.
+ *
+ * @param {string} value - Raw value.
+ * @returns {string} HTML-escaped value.
+ */
 function escapeHtml(value) {
   return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function renderOtp({ code, expires_in: expiresIn }) {
-  const subject = 'Kode verifikasi Rusuh Anda';
-  const text =
-    `Kode verifikasi Anda adalah ${code}.\n\n` +
-    `Kode berlaku ${expiresIn} menit. Jangan bagikan kode ini kepada siapa pun.\n\n` +
-    `Jika Anda tidak meminta kode ini, abaikan email ini.`;
-  const html =
-    `<p>Kode verifikasi Anda adalah <strong>${escapeHtml(code)}</strong>.</p>` +
-    `<p>Kode berlaku ${expiresIn} menit. Jangan bagikan kode ini kepada siapa pun.</p>` +
-    `<p>Jika Anda tidak meminta kode ini, abaikan email ini.</p>`;
-  return { subject, text, html };
-}
-
-function renderTicket({
-  event_name: eventName,
-  event_date: eventDate,
-  venue,
-  doors_open_at: doorsOpenAt,
-  tickets,
-  download_all_url: downloadAllUrl,
-  download_links: downloadLinks = []
-}) {
-  const subject = `E-tiket Anda — ${eventName}`;
-  const lines = tickets.map((ticket, index) => {
-    const link = downloadLinks[index] ? `\n  Unduh: ${downloadLinks[index]}` : '';
-    return (
-      `- Tiket ${index + 1}: ${ticket.category}\n` +
-      `  Kode tiket: ${ticket.ticket_code}\n` +
-      `  NIK: ${ticket.nik_masked}${ticket.gate ? `\n  Gerbang: ${ticket.gate}` : ''}${link}`
-    );
+/**
+ * Renders one Mustache-lite string: {{var}} substitution plus
+ * {{#section}}...{{/section}} loops. No triple-mustache, no inverted
+ * sections. Missing variables render as ''. Values are escaped only when
+ * rendering HTML (escape: true).
+ *
+ * @param {string} template - Template source.
+ * @param {object} scope - Variables in scope.
+ * @param {object} options - { escape: boolean }.
+ * @returns {string} Rendered string.
+ */
+function renderMustache(template, scope, { escape }) {
+  const substitute = (value) => {
+    const raw = value === undefined || value === null ? '' : String(value);
+    return escape ? escapeHtml(raw) : raw;
+  };
+  let out = template.replace(/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g, (_match, key, body) => {
+    const value = scope[key];
+    if (!Array.isArray(value)) return '';
+    return value.map((item) => renderMustache(body, { ...scope, ...item }, { escape })).join('');
   });
-  const text =
-    `E-tiket Anda untuk ${eventName} sudah terbit.\n\n` +
-    `Tanggal: ${eventDate}\n` +
-    `Tempat: ${venue}\n` +
-    `${doorsOpenAt ? `Pintu dibuka: ${doorsOpenAt}\n` : ''}\n` +
-    `${lines.join('\n')}\n\n` +
-    `${downloadAllUrl ? `Unduh semua (PDF): ${downloadAllUrl}\n\n` : ''}` +
-    `Tunjukkan kode tiket (atau QR di PDF) di pintu masuk. Selamat menonton!`;
-  const rows = tickets
-    .map(
-      (ticket, index) =>
-        `<tr><td>${index + 1}</td><td>${escapeHtml(ticket.category)}</td><td>${escapeHtml(ticket.ticket_code)}</td>` +
-        `<td>${escapeHtml(ticket.nik_masked)}</td><td>${escapeHtml(ticket.gate || '-')}</td>` +
-        `<td>${downloadLinks[index] ? `<a href="${escapeHtml(downloadLinks[index])}">Unduh</a>` : '-'}</td></tr>`
-    )
-    .join('');
-  const html =
-    `<p>E-tiket Anda untuk <strong>${escapeHtml(eventName)}</strong> sudah terbit.</p>` +
-    `<p>Tanggal: ${escapeHtml(eventDate)}<br>Tempat: ${escapeHtml(venue)}` +
-    `${doorsOpenAt ? `<br>Pintu dibuka: ${escapeHtml(doorsOpenAt)}` : ''}</p>` +
-    `<table border="1" cellpadding="6" cellspacing="0"><thead><tr>` +
-    `<th>#</th><th>Kategori</th><th>Kode tiket</th><th>NIK</th><th>Gerbang</th><th>PDF</th>` +
-    `</tr></thead><tbody>${rows}</tbody></table>` +
-    `${downloadAllUrl ? `<p><a href="${escapeHtml(downloadAllUrl)}">Unduh semua (PDF)</a></p>` : ''}` +
-    `<p>Tunjukkan kode tiket (atau QR di PDF) di pintu masuk. Selamat menonton!</p>`;
-  return { subject, text, html };
+  out = out.replace(/\{\{(\w+)\}\}/g, (_match, key) => substitute(scope[key]));
+  return out;
 }
-
-function renderExpired({ event_name: eventName, booking_id: bookingId, admin_email: adminEmail }) {
-  const subject = `Pembayaran ${eventName} dibatalkan`;
-  const text =
-    `Pembayaran Anda untuk ${eventName} (booking ${bookingId}) dibatalkan karena ` +
-    `pembayaran tidak selesai dalam 10 menit. Stok tiket Anda sudah dilepas dan ` +
-    `tidak ada tagihan atas booking ini.\n\n` +
-    `Jika saldo Anda sudah terpotong, hubungi admin melalui email ${adminEmail} ` +
-    `dengan melampirkan bukti transfer.`;
-  const html =
-    `<p>Pembayaran Anda untuk <strong>${escapeHtml(eventName)}</strong> (booking ${escapeHtml(bookingId)}) ` +
-    `dibatalkan karena pembayaran tidak selesai dalam 10 menit. Stok tiket Anda sudah dilepas dan ` +
-    `tidak ada tagihan atas booking ini.</p>` +
-    `<p>Jika saldo Anda sudah terpotong, hubungi admin melalui email ` +
-    `<a href="mailto:${escapeHtml(adminEmail)}">${escapeHtml(adminEmail)}</a> dengan melampirkan bukti transfer.</p>`;
-  return { subject, text, html };
-}
-
-const renderers = { EMAIL_OTP: renderOtp, EMAIL_TICKET: renderTicket, EMAIL_EXPIRED: renderExpired };
 
 /**
  * Renders an email for a validated job.
  *
- * @param {object} job - Validated job (type + variables).
- * @param {object} [extra] - Extra variables merged into the template input.
+ * @param {object} job - Validated job ({type, locale, variables, ...}).
+ * @param {object} [extra] - Extra variables merged into the template scope
+ *   (e.g. S3 download links resolved by the use case).
  * @returns {object} {subject, text, html}.
+ * @throws {Error} When the job type has no template.
  */
 function renderEmail(job, extra = {}) {
-  const renderer = renderers[job.type];
-  if (!renderer) throw new Error(`No template for type ${job.type}`);
-  return renderer({ ...job.variables, ...extra });
+  const name = TEMPLATE_NAMES[job.type];
+  if (!name) throw new Error(`No template for type ${job.type}`);
+  const locale = LOCALES.includes(job.locale) ? job.locale : 'id';
+  const template = TEMPLATES[name][locale];
+  const scope = { ...job.variables, ...extra };
+  const subjectMatch = template.text.match(/^Subject: (.*)$/m);
+  const subject = subjectMatch ? renderMustache(subjectMatch[1], scope, { escape: false }) : '';
+  return {
+    subject,
+    text: renderMustache(template.text.replace(/^Subject: .*\n+/, ''), scope, { escape: false }),
+    html: renderMustache(template.html, scope, { escape: true })
+  };
 }
 
-module.exports = { renderEmail, renderOtp, renderTicket, renderExpired };
+module.exports = { renderEmail };

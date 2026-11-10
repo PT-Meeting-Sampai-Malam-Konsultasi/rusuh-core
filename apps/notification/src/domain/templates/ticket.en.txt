@@ -1,0 +1,22 @@
+Subject: Your e-tickets: {{event_name}}
+
+See you there!
+
+{{event_name}} — {{event_subtitle}}
+{{event_date}} · {{event_time}}
+{{venue}}
+
+We've received the payment for order {{order_code}}. Here are your {{count}} tickets — they're also in My Tickets and the attached PDF.
+
+{{#tickets}}- Ticket {{index}} of {{count}}: {{category}} · {{holder_name}} · NIK {{nik_masked}} · {{ticket_code}} · {{gate}}
+{{/tickets}}
+
+At the gate: Show the QR from the e-ticket (My Tickets or the PDF) and the original KTP. The name and NIK must match the ticket. Doors open at {{doors_open_at}}.
+
+View e-tickets: {{ticket_url}}
+Download all (PDF): {{download_all_url}}
+
+Order: {{order_code}}
+Paid: {{total}}
+Method: {{payment_method}}
+Paid at: {{paid_at}}

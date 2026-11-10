@@ -9,7 +9,7 @@ const otpJob = {
   type: 'EMAIL_OTP',
   to: 'user@example.id',
   request_id: 'req-1',
-  variables: { code: '123456', expires_in: 10 }
+  variables: { code: '123456', code_spaced: '123&nbsp;456', expires_at: '21.30 WIB', email: 'user@example.id' }
 };
 
 const ticketJob = {
@@ -19,10 +19,29 @@ const ticketJob = {
   booking_id: 'bk_01',
   variables: {
     event_name: 'Konser Rusuh',
-    event_date: '2026-11-13',
+    event_subtitle: 'Tour Terakhir',
+    event_date: 'Sab, 12 Des 2026',
+    event_time: '19.00 WIB',
     venue: 'GOR Jakarta',
-    doors_open_at: '18:00',
-    tickets: [{ category: 'VIP', gate: 'A', nik_masked: '3171****0001', ticket_code: 'SMD-FB-04827' }]
+    doors_open_at: '18.00 WIB',
+    order_code: 'RSH-ORDER-77',
+    total: 'Rp 3.015.000',
+    payment_method: 'QRIS',
+    paid_at: 'Sab, 12 Des 2026 19.05 WIB',
+    count: 1,
+    email: 'user@example.id',
+    ticket_url: 'https://rusuh.id/tickets/RSH-ORDER-77',
+    download_all_url: 'https://rusuh.id/tickets/RSH-ORDER-77.pdf',
+    tickets: [
+      {
+        index: 1,
+        category: 'VIP',
+        holder_name: 'Rina',
+        nik_masked: '3174 •••• •••• 0004',
+        ticket_code: 'SMD-FB-04827',
+        gate: 'A'
+      }
+    ]
   },
   attachments: [{ s3_key: 'tickets/bk_01/SMD-FB-04827.pdf' }]
 };
@@ -32,7 +51,13 @@ const expiredJob = {
   to: 'user@example.id',
   request_id: 'req-3',
   booking_id: 'bk_02',
-  variables: { event_name: 'Konser Rusuh', booking_id: 'bk_02' }
+  variables: {
+    event_name: 'Konser Rusuh',
+    order_code: 'RSH-ORDER-78',
+    total: 'Rp 1.515.000',
+    deadline: 'Sab, 12 Des 2026 19.10 WIB',
+    email: 'user@example.id'
+  }
 };
 
 describe('validateJob', () => {
@@ -61,7 +86,7 @@ describe('validateJob', () => {
 describe('renderEmail', () => {
   it('renders OTP with the code and expiry, never shared', () => {
     const { subject, text, html } = renderEmail(validateJob(otpJob));
-    expect(subject).toContain('Kode verifikasi');
+    expect(subject).toBe('123456 adalah kode masuk Rusuh Anda');
     expect(text).toContain('123456');
     expect(text).toContain('10 menit');
     expect(text).toContain('Jangan bagikan');
@@ -69,21 +94,21 @@ describe('renderEmail', () => {
   });
 
   it('renders a ticket with event, masked NIK and ticket code', () => {
-    const { subject, text } = renderEmail(validateJob(ticketJob), { download_links: ['https://s3.example/dl'] });
+    const { subject, text } = renderEmail(validateJob(ticketJob));
     expect(subject).toContain('Konser Rusuh');
     expect(text).toContain('SMD-FB-04827');
-    expect(text).toContain('3171****0001');
-    expect(text).toContain('https://s3.example/dl');
+    expect(text).toContain('3174 •••• •••• 0004');
+    expect(text).toContain('https://rusuh.id/tickets/RSH-ORDER-77.pdf');
     expect(text).not.toContain('3171010101900001');
   });
 
-  it('renders expired with the D11 notice and admin email', () => {
-    const { text } = renderEmail(validateJob(expiredJob), { admin_email: 'admin@rusuh-tiket.web.id' });
-    expect(text).toContain('10 menit');
-    expect(text).toContain('tidak ada tagihan');
-    expect(text).toContain('Jika saldo Anda sudah terpotong');
-    expect(text).toContain('admin@rusuh-tiket.web.id');
-    expect(text).not.toContain('merasa');
+  it('renders expired with the no-charge notice and rejoin link', () => {
+    const { subject, text } = renderEmail(validateJob(expiredJob));
+    expect(subject).toContain('dibatalkan');
+    expect(text).toContain('Tidak ada uang yang ditagih');
+    expect(text).toContain('RSH-ORDER-78');
+    expect(text).toContain('Sab, 12 Des 2026 19.10 WIB');
+    expect(text).not.toContain('admin');
   });
 });
 
@@ -245,7 +270,7 @@ describe('createEmailUseCase', () => {
     const sent = sender.send.mock.calls[0][0];
     expect(sent.attachments).toHaveLength(1);
     expect(sent.attachments[0].filename).toBe('SMD-FB-04827.pdf');
-    expect(sent.text).toContain('https://s3.example/dl/bk_01');
+    expect(sent.text).toContain('SMD-FB-04827');
     const row = logStore._rows.get('bk_01:TICKET');
     expect(row.status).toBe('sent');
     expect(row.ses_message_id).toBe('ses-ticket');
@@ -267,15 +292,15 @@ describe('createEmailUseCase', () => {
     expect(logStore._rows.get('bk_01:TICKET').status).toBe('failed');
   });
 
-  it('sends an expired email with the D11 notice and marks it sent', async () => {
+  it('sends an expired email with the no-charge notice and marks it sent', async () => {
     const logStore = createMemoryEmailLogStore({});
     const sender = { send: jest.fn(async () => 'ses-exp') };
     const processor = createEmailUseCase({ logStore, sender, s3: {}, config, logger });
     const result = await processor.process(expiredJob);
     expect(result).toEqual({ outcome: 'sent', sesMessageId: 'ses-exp' });
     const sent = sender.send.mock.calls[0][0];
-    expect(sent.text).toContain('Jika saldo Anda sudah terpotong');
-    expect(sent.text).toContain('admin@rusuh-tiket.web.id');
+    expect(sent.subject).toContain('dibatalkan');
+    expect(sent.text).toContain('Tidak ada uang yang ditagih');
     expect(logStore._rows.get('bk_02:EXPIRED').status).toBe('sent');
   });
 
@@ -314,16 +339,6 @@ describe('createEmailUseCase', () => {
     expect(sender.send).not.toHaveBeenCalled();
     expect(s3.getObject).not.toHaveBeenCalled();
     expect(logStore._rows.get('bk_01:TICKET').status).toBe('failed');
-  });
-
-  it('uses the job admin_email for an expired email when present', async () => {
-    const logStore = createMemoryEmailLogStore({});
-    const sender = { send: jest.fn(async () => 'ses-exp') };
-    const processor = createEmailUseCase({ logStore, sender, s3: {}, config, logger });
-    const job = { ...expiredJob, variables: { ...expiredJob.variables, admin_email: 'help@rusuh-tiket.web.id' } };
-    const result = await processor.process(job);
-    expect(result.outcome).toBe('sent');
-    expect(sender.send.mock.calls[0][0].text).toContain('help@rusuh-tiket.web.id');
   });
 
   it('uses the fallback console logger and never logs the OTP code', async () => {

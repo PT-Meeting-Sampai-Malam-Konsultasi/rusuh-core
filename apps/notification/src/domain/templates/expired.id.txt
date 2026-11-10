@@ -1,0 +1,15 @@
+Subject: Pesanan {{event_name}} dibatalkan — tidak ada tagihan
+
+Waktu bayar sudah habis.
+
+Pembayaran untuk pesanan {{order_code}} tidak selesai sampai {{deadline}}, jadi pesanan kami batalkan dan tiketnya kembali untuk pembeli lain. Tidak ada uang yang ditagih.
+
+Event: {{event_name}}
+Pesanan: {{order_code}}
+Total: {{total}}
+Batas bayar: {{deadline}}
+
+Masih ingin nonton? Antre lagi dari awal, selama tiket masih ada. Nomor antrian yang baru mulai dari belakang.
+Antre lagi: {{event_url}}
+
+Sudah terlanjur membayar? Tenang: pembayaran yang masuk setelah batas waktu tidak menjadi tiket, dan kami kirim email terpisah bahwa uang Anda akan kami kembalikan.

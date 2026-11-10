@@ -1,0 +1,17 @@
+Subject: Your {{event_name}} payment arrived late — we'll refund it
+
+Your payment arrived after the deadline.
+
+We received {{total}} for order {{order_code}} at {{paid_at}}, after the {{deadline}} deadline. The order had already been cancelled, so no ticket could be issued.
+
+Your money will be refunded. Our finance team refunds it to {{payment_method}} within {{refund_window}}. You don't need to do anything; we'll write again when the money is sent.
+
+Event: {{event_name}}
+Order: {{order_code}}
+Amount: {{total}}
+Method: {{payment_method}}
+Paid at: {{paid_at}}
+Pay by: {{deadline}}
+Transaction ID: {{transaction_id}}
+
+Keep this e-mail. If you have questions, mention the order code below.

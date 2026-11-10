@@ -68,7 +68,11 @@ describe('createWorkerUseCase', () => {
       SQS_OTP_QUEUE_URL: 'https://sqs.ap-southeast-3.amazonaws.com/123/rusuh-otp'
     });
     const adapters = fakeAdapters();
-    const otpJob = { type: 'EMAIL_OTP', to: 'user@example.id', variables: { code: '123456', expires_in: 10 } };
+    const otpJob = {
+      type: 'EMAIL_OTP',
+      to: 'user@example.id',
+      variables: { code: '123456', code_spaced: '123&nbsp;456', expires_at: '21.30 WIB', email: 'user@example.id' }
+    };
     let calls = 0;
     adapters.sqs.receive = jest.fn(async () => {
       calls += 1;
