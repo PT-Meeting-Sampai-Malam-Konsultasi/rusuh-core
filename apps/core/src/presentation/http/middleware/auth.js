@@ -11,11 +11,20 @@ const { problemError } = require('@/domain/problem');
  * @param {Function} [deps.verify] - (token) => Promise<payload>.
  * @param {Map} [deps.publicKeys] - kid -> JWK (used by the default verifier).
  * @param {Function} [deps.isDenied] - Async (jti) => boolean (denylist).
+ * @param {string} [deps.expectedAud] - Expected audience (config AUTH_AUDIENCE).
+ * @param {string} [deps.expectedIss] - Expected issuer (config AUTH_ISSUER).
  * @returns {Function} Express middleware.
  */
-function createRequireAccount({ verify, publicKeys, isDenied } = {}) {
+function createRequireAccount({ verify, publicKeys, isDenied, expectedAud, expectedIss } = {}) {
   const verifyFn =
-    verify || ((token) => verifyAccountToken(token, { publicKeys, isDenied: isDenied || (async () => false) }));
+    verify ||
+    ((token) =>
+      verifyAccountToken(token, {
+        publicKeys,
+        isDenied: isDenied || (async () => false),
+        expectedAud,
+        expectedIss
+      }));
   return async (request, _response, next) => {
     try {
       const header = request.headers.authorization || '';

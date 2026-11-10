@@ -33,11 +33,17 @@ function parseJwks(authJwks) {
 }
 
 /** Builds the auth middleware set for a dependency graph. */
-function buildAuth({ publicKeys, isDenied, stock, serviceKey }) {
+function buildAuth({ publicKeys, isDenied, stock, serviceKey, authAudience, authIssuer }) {
   return {
-    requireAccount: createRequireAccount({ publicKeys, isDenied }),
+    requireAccount: createRequireAccount({ publicKeys, isDenied, expectedAud: authAudience, expectedIss: authIssuer }),
     requireAdmission: createRequireAdmission({ stock }),
-    requireAccountOrAdmission: createRequireAccountOrAdmission({ publicKeys, isDenied, stock }),
+    requireAccountOrAdmission: createRequireAccountOrAdmission({
+      publicKeys,
+      isDenied,
+      stock,
+      expectedAud: authAudience,
+      expectedIss: authIssuer
+    }),
     requireServiceKey: createRequireServiceKey({ serviceKey })
   };
 }
@@ -140,7 +146,16 @@ function createDefaultDeps(config, overrides = {}) {
     mayAccessBooking
   });
   const { auth: providedAuth } = overrides;
-  const auth = providedAuth || buildAuth({ publicKeys, isDenied, stock, serviceKey: config.serviceKey });
+  const auth =
+    providedAuth ||
+    buildAuth({
+      publicKeys,
+      isDenied,
+      stock,
+      serviceKey: config.serviceKey,
+      authAudience: config.authAudience,
+      authIssuer: config.authIssuer
+    });
   const workers = buildWorkers({ bookingService: useCases.bookings, config });
   return {
     config,
