@@ -1,3 +1,4 @@
+const { encryptText } = require('@rusuh/contracts').nikCrypto;
 const { createNikCrypto, maskNik } = require('../nik');
 
 describe('nik-crypto', () => {
@@ -10,23 +11,21 @@ describe('nik-crypto', () => {
     expect(nikCrypto.decrypt(cipher)).toBe('3171010101900001');
   });
 
+  it('decrypts a ciphertext written by core-module (shared @rusuh/contracts format)', () => {
+    // core-module writes tickets.nik_ciphertext with the same shared
+    // encryptText; this is the gate-scan read path.
+    const stored = encryptText('3171010101900001', key);
+    expect(nikCrypto.decrypt(stored)).toBe('3171010101900001');
+  });
+
   it('rejects a tampered ciphertext (auth tag)', () => {
-    const cipher = nikCrypto.encrypt('3171010101900001');
-    const parts = cipher.split(':');
-    const tampered = `${parts[0]}:${Buffer.from('tampered').toString('base64')}:${parts[2]}`;
-    expect(() => nikCrypto.decrypt(tampered)).toThrow();
+    const buffer = Buffer.from(nikCrypto.encrypt('3171010101900001'), 'base64url');
+    buffer[buffer.length - 1] = (buffer[buffer.length - 1] + 1) % 256;
+    expect(() => nikCrypto.decrypt(buffer.toString('base64url'))).toThrow();
   });
 
   it('rejects a malformed ciphertext', () => {
-    expect(() => nikCrypto.decrypt('not-a-cipher')).toThrow('Malformed NIK ciphertext');
-  });
-
-  it('rejects a ciphertext missing the iv part', () => {
-    expect(() => nikCrypto.decrypt(':ZGF0YQ==:dGFn')).toThrow('Malformed NIK ciphertext');
-  });
-
-  it('rejects a ciphertext missing the auth tag part', () => {
-    expect(() => nikCrypto.decrypt('aXY6ZGF0YQ==')).toThrow('Malformed NIK ciphertext');
+    expect(() => nikCrypto.decrypt('not-a-cipher')).toThrow('Malformed ciphertext');
   });
 
   it('rejects a key that is not 32 bytes', () => {

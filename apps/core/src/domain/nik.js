@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { nikCrypto } = require('@rusuh/contracts');
 
 /**
  * NIK handling (D24): three stored forms per NIK.
@@ -6,6 +7,8 @@ const crypto = require('crypto');
  *  (2) blind index — HMAC-SHA256(NIK) with a separate key, for quota lookup.
  *      The Lua script and the backstop DB only ever see the HMAC.
  *  (3) ciphertext — AES-256-GCM (the only reversible form, for officer view).
+ *      The cipher + wire format live in @rusuh/contracts so officer-module
+ *      (the reader) decrypts exactly what this module (the writer) stores.
  * Keys come from config (KMS in production; env-provided keys here).
  */
 
@@ -32,14 +35,13 @@ function isValidNikFormat(nik) {
 
 /**
  * Masked NIK for display (4+4, Q19): "3174 •••• •••• 0004".
+ * Delegates to @rusuh/contracts (single canonical implementation).
  *
  * @param {string} nik - Full NIK.
  * @returns {string} Masked NIK.
  */
 function maskNik(nik) {
-  const normalized = normalizeNik(nik);
-  if (normalized.length !== 16) return '•••• •••• •••• ••••';
-  return `${normalized.slice(0, 4)} •••• •••• ${normalized.slice(12, 16)}`;
+  return nikCrypto.maskNik(nik);
 }
 
 /**
@@ -61,11 +63,7 @@ function hmacNik(nik, key) {
  * @returns {string} Encrypted payload.
  */
 function encryptText(text, key) {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  const ciphertext = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return Buffer.concat([iv, tag, ciphertext]).toString('base64url');
+  return nikCrypto.encryptText(text, key);
 }
 
 /**
@@ -76,13 +74,7 @@ function encryptText(text, key) {
  * @returns {string} Plaintext.
  */
 function decryptText(payload, key) {
-  const buffer = Buffer.from(payload, 'base64url');
-  const iv = buffer.subarray(0, 12);
-  const tag = buffer.subarray(12, 28);
-  const ciphertext = buffer.subarray(28);
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
+  return nikCrypto.decryptText(payload, key);
 }
 
 /**
