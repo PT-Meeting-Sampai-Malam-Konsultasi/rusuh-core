@@ -1,7 +1,7 @@
 const { createMemoryStore } = require('@/infrastructure/persistence/memory-store');
 const { createMemoryMailer } = require('@/infrastructure/messaging/memory-mailer');
 const { createTokenService } = require('@/infrastructure/tokens/token-service');
-const { hmacCode, generateCode, normalizeEmail } = require('@/domain/otp');
+const { hmacCode, generateCode, normalizeEmail, spaceOtpCode, formatOtpExpiry } = require('@/domain/otp');
 const { createOtpUseCase } = require('../otp.use-case');
 
 function buildUseCase() {
@@ -44,7 +44,6 @@ describe('otp.use-case', () => {
           email: 'b@example.com',
           codeHash: 'x',
           deviceId: null,
-          fullName: null,
           locale: 'id',
           expiresAt: new Date(Date.now() + 600000)
         });
@@ -70,28 +69,26 @@ describe('otp.use-case', () => {
   });
 
   describe('verifyOtp', () => {
-    it('verifies a code and creates a new account with a Session', async () => {
+    it('verifies a code and creates a new account without a profile name', async () => {
       const { useCase, mailer, store } = buildUseCase();
-      const { challengeId } = await useCase.requestOtp({
-        email: 'd@example.com',
-        fullName: 'Dewi',
-        consentVersion: '2026-10'
-      });
+      const { challengeId } = await useCase.requestOtp({ email: 'd@example.com', consentVersion: '2026-10' });
       const { code } = mailer.sent[0];
       const session = await useCase.verifyOtp({ challengeId, code });
       expect(session.isNewAccount).toBe(true);
       expect(session.accessToken).toBeTruthy();
       expect(session.expiresIn).toBe(900);
       expect(session.refreshToken).toMatch(/^rt_/);
-      expect(session.user).toEqual(expect.objectContaining({ email: 'd@example.com', fullName: 'Dewi', locale: 'id' }));
+      expect(session.user).toEqual(expect.objectContaining({ email: 'd@example.com', fullName: null, locale: 'id' }));
       const account = await store.findAccountByEmail('d@example.com');
-      expect(account.profileComplete).toBe(true);
+      expect(account.profileComplete).toBe(false);
+      expect(await store.findProfile(account.id)).toBeNull();
     });
 
-    it('logs in an existing account without a full name', async () => {
+    it('logs in an existing account and keeps its profile', async () => {
       const { useCase, mailer, store } = buildUseCase();
-      const first = await useCase.requestOtp({ email: 'e@example.com', fullName: 'Eko' });
-      await useCase.verifyOtp({ challengeId: first.challengeId, code: mailer.sent[0].code });
+      const first = await useCase.requestOtp({ email: 'e@example.com' });
+      const firstSession = await useCase.verifyOtp({ challengeId: first.challengeId, code: mailer.sent[0].code });
+      await store.upsertProfile(firstSession.user.userId, { name: 'Eko', locale: 'id' });
       // Backdate the previous challenge so the 60 s cooldown has passed.
       const previous = await store.findOtpChallengeById(first.challengeId);
       previous.createdAt = new Date(Date.now() - 61 * 1000);
@@ -99,6 +96,7 @@ describe('otp.use-case', () => {
       const second = await useCase.requestOtp({ email: 'e@example.com' });
       const session = await useCase.verifyOtp({ challengeId: second.challengeId, code: mailer.sent[1].code });
       expect(session.isNewAccount).toBe(false);
+      expect(session.user.fullName).toBe('Eko');
     });
 
     it('rejects a wrong code with attemptsLeft, then locks after 5 attempts', async () => {
@@ -161,6 +159,16 @@ describe('otp.use-case', () => {
       expect(hmacCode('123456', 's')).not.toBe(hmacCode('123456', 'other'));
       expect(normalizeEmail('  Foo@Bar.ID ')).toBe('foo@bar.id');
       expect(generateCode()).toMatch(/^[0-9]{6}$/);
+    });
+
+    it('spaceOtpCode joins the halves with a non-breaking space', () => {
+      expect(spaceOtpCode('482019')).toBe(`482${String.fromCharCode(160)}019`);
+    });
+
+    it('formatOtpExpiry renders WIB clock times per locale', () => {
+      const at = new Date('2026-11-10T16:30:00Z');
+      expect(formatOtpExpiry(at, 'id')).toBe('23.30 WIB');
+      expect(formatOtpExpiry(at, 'en')).toBe('11.30 pm WIB');
     });
   });
 });

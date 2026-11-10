@@ -17,18 +17,16 @@ function createTestApp() {
 }
 
 /**
- * Logs in a user via the OTP flow and returns the Session.
+ * Logs in a user via the OTP flow and returns the Session. The account is
+ * created without a profile name; tests that need one call PUT /v1/auth/profile.
  *
  * @param {object} app - Express app.
  * @param {object} mailer - Memory mailer (to read the OTP code).
  * @param {string} email - Email to log in.
- * @param {string} [fullName] - Full name for a new account.
  * @returns {Promise<object>} Session.
  */
-async function loginViaOtp(app, mailer, email, fullName) {
-  const body = { email, consentVersion: '2026-10' };
-  if (fullName) body.fullName = fullName;
-  const requested = await request(app).post('/v1/auth/otp').send(body);
+async function loginViaOtp(app, mailer, email) {
+  const requested = await request(app).post('/v1/auth/otp').send({ email });
   if (requested.status !== 202) throw new Error(`OTP request failed: ${requested.status}`);
   const { code } = mailer.sent[mailer.sent.length - 1];
   const verified = await request(app)

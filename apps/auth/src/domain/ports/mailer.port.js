@@ -4,7 +4,7 @@
  * The OTP code is in the job (transient) and is NEVER written to logs.
  *
  * @typedef {object} Mailer
- * @property {function({to: string, code: string, locale: string}): Promise<void>} sendOtp - Delivers an OTP code to an email.
+ * @property {function({to: string, code: string, locale: string, expiresAt: Date}): Promise<void>} sendOtp - Delivers an OTP code to an email (expiresAt pre-formats the e-mail clock time).
  * @property {function(): Promise<void>} close - Releases the mailer (client destroy / no-op).
  */
 

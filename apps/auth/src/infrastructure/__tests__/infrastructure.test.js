@@ -59,7 +59,7 @@ describe('memory-mailer', () => {
     const mailer = createMemoryMailer();
     await mailer.sendOtp({ to: 'a@example.com', code: '123456', locale: 'id' });
     expect(mailer.sent).toHaveLength(1);
-    expect(mailer.sent[0]).toEqual(expect.objectContaining({ to: 'a@example.com', template: 'otp' }));
+    expect(mailer.sent[0]).toEqual(expect.objectContaining({ to: 'a@example.com', code: '123456', locale: 'id' }));
     mailer.failNext();
     await expect(mailer.sendOtp({ to: 'b@example.com', code: '654321' })).rejects.toThrow('Mailer unavailable');
   });

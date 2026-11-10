@@ -31,7 +31,6 @@ function createPostgresStore({ databaseUrl }) {
     email: row.email,
     codeHash: row.code_hash,
     deviceId: row.device_id,
-    fullName: row.full_name,
     locale: row.locale,
     purpose: row.purpose,
     expiresAt: row.expires_at,
@@ -95,11 +94,11 @@ function createPostgresStore({ databaseUrl }) {
       return mapProfile(rows[0]);
     },
 
-    async createOtpChallenge({ email, codeHash, deviceId, fullName, locale, expiresAt }) {
+    async createOtpChallenge({ email, codeHash, deviceId, locale, expiresAt }) {
       const { rows } = await pool.query(
-        `INSERT INTO otp_codes (email, code_hash, device_id, full_name, locale, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-        [email, codeHash, deviceId || null, fullName || null, locale || 'id', expiresAt]
+        `INSERT INTO otp_codes (email, code_hash, device_id, locale, expires_at)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [email, codeHash, deviceId || null, locale || 'id', expiresAt]
       );
       return mapChallenge(rows[0]);
     },

@@ -14,9 +14,7 @@ describe('POST /v1/auth/otp + /v1/auth/otp/verify', () => {
   });
 
   it('POST /v1/auth/otp returns 202 with a challenge id', async () => {
-    const response = await request(app)
-      .post('/v1/auth/otp')
-      .send({ email: 'rina@example.com', fullName: 'Rina', consentVersion: '2026-10' });
+    const response = await request(app).post('/v1/auth/otp').send({ email: 'rina@example.com' });
     expect(response.status).toBe(202);
     expect(response.body.challengeId).toMatch(/^ch_/);
     expect(response.body.expiresAt).toBeTruthy();
@@ -24,10 +22,15 @@ describe('POST /v1/auth/otp + /v1/auth/otp/verify', () => {
     expect(dependencies.mailer.sent).toHaveLength(1);
   });
 
+  it('POST /v1/auth/otp with fullName returns 400 (name is set after login)', async () => {
+    const response = await request(app).post('/v1/auth/otp').send({ email: 'rina@example.com', fullName: 'Rina' });
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('BAD_REQUEST');
+    expect(dependencies.mailer.sent).toHaveLength(0);
+  });
+
   it('POST /v1/auth/otp/request (LLD-01 alias) works the same', async () => {
-    const response = await request(app)
-      .post('/v1/auth/otp/request')
-      .send({ email: 'budi@example.com', consentVersion: '2026-10' });
+    const response = await request(app).post('/v1/auth/otp/request').send({ email: 'budi@example.com' });
     expect(response.status).toBe(202);
     expect(response.body.challengeId).toMatch(/^ch_/);
   });
@@ -48,7 +51,7 @@ describe('POST /v1/auth/otp + /v1/auth/otp/verify', () => {
   });
 
   it('POST /v1/auth/otp/verify logs in and sets the __Host-rt cookie', async () => {
-    const requested = await request(app).post('/v1/auth/otp').send({ email: 'dewi@example.com', fullName: 'Dewi' });
+    const requested = await request(app).post('/v1/auth/otp').send({ email: 'dewi@example.com' });
     const { code } = dependencies.mailer.sent[0];
     const response = await request(app)
       .post('/v1/auth/otp/verify')
@@ -57,6 +60,7 @@ describe('POST /v1/auth/otp + /v1/auth/otp/verify', () => {
     expect(response.body.isNewAccount).toBe(true);
     expect(response.body.expiresIn).toBe(900);
     expect(response.body.user.email).toBe('dewi@example.com');
+    expect(response.body.user.fullName).toBeNull();
     expect(response.headers['set-cookie'][0]).toMatch(/__Host-rt=/);
     expect(response.headers['set-cookie'][0]).toMatch(/HttpOnly/);
   });

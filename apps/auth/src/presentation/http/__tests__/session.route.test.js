@@ -14,7 +14,7 @@ describe('POST /v1/auth/refresh + POST /v1/auth/logout', () => {
   });
 
   it('POST /v1/auth/refresh rotates tokens (body)', async () => {
-    const session = await loginViaOtp(app, dependencies.mailer, 'rina@example.com', 'Rina');
+    const session = await loginViaOtp(app, dependencies.mailer, 'rina@example.com');
     const response = await request(app).post('/v1/auth/refresh').send({ refreshToken: session.refreshToken });
     expect(response.status).toBe(200);
     expect(response.body.accessToken).not.toBe(session.accessToken);
@@ -23,7 +23,7 @@ describe('POST /v1/auth/refresh + POST /v1/auth/logout', () => {
   });
 
   it('POST /v1/auth/refresh reads the __Host-rt cookie (web)', async () => {
-    const session = await loginViaOtp(app, dependencies.mailer, 'budi@example.com', 'Budi');
+    const session = await loginViaOtp(app, dependencies.mailer, 'budi@example.com');
     const response = await request(app)
       .post('/v1/auth/refresh')
       .set('Cookie', `__Host-rt=${session.refreshToken}`)
@@ -39,7 +39,7 @@ describe('POST /v1/auth/refresh + POST /v1/auth/logout', () => {
   });
 
   it('POST /v1/auth/refresh reuse revokes the family (401 + rotated token dead)', async () => {
-    const session = await loginViaOtp(app, dependencies.mailer, 'caca@example.com', 'Caca');
+    const session = await loginViaOtp(app, dependencies.mailer, 'caca@example.com');
     const rotated = await request(app).post('/v1/auth/refresh').send({ refreshToken: session.refreshToken });
     expect(rotated.status).toBe(200);
     const reuse = await request(app).post('/v1/auth/refresh').send({ refreshToken: session.refreshToken });
@@ -49,7 +49,7 @@ describe('POST /v1/auth/refresh + POST /v1/auth/logout', () => {
   });
 
   it('POST /v1/auth/logout returns 204 and the access token stops working', async () => {
-    const session = await loginViaOtp(app, dependencies.mailer, 'dewi@example.com', 'Dewi');
+    const session = await loginViaOtp(app, dependencies.mailer, 'dewi@example.com');
     const response = await request(app).post('/v1/auth/logout').set('Authorization', `Bearer ${session.accessToken}`);
     expect(response.status).toBe(204);
     const me = await request(app).get('/v1/me').set('Authorization', `Bearer ${session.accessToken}`);

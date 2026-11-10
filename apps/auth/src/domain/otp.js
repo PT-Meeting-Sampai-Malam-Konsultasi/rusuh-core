@@ -14,6 +14,7 @@ const OTP_MAX_SENDS_PER_WINDOW = 3;
 const OTP_SEND_WINDOW_MS = 10 * 60 * 1000;
 const OTP_MAX_ATTEMPTS = 5;
 const OTP_CODE_LENGTH = 6;
+const NBSP = String.fromCharCode(160);
 
 /** HMAC-SHA256 of an OTP code (ADR-0006: HMAC + device-bound, hash only). */
 function hmacCode(code, secret) {
@@ -30,6 +31,49 @@ function normalizeEmail(email) {
   return String(email).trim().toLowerCase();
 }
 
+/**
+ * Spaces a 6-digit OTP code for display: "482019" -> "482 019" with a
+ * non-breaking space (U+00A0), so an HTML renderer can escape the value
+ * without breaking the spacing (rusuh-web#46 variables table).
+ *
+ * @param {string} code - 6-digit code.
+ * @returns {string} Spaced code.
+ */
+function spaceOtpCode(code) {
+  return `${code.slice(0, 3)}${NBSP}${code.slice(3)}`;
+}
+
+/**
+ * Formats an OTP expiry as a WIB clock time for the e-mail language
+ * (rusuh-web#46: id "21.30 WIB", en "7.00 pm WIB"). WIB is UTC+7 year-round.
+ *
+ * @param {Date|string} expiresAt - Challenge expiry.
+ * @param {string} locale - 'id' | 'en'.
+ * @returns {string} Formatted clock time.
+ */
+function formatOtpExpiry(expiresAt, locale) {
+  const date = expiresAt instanceof Date ? expiresAt : new Date(expiresAt);
+  if (locale === 'en') {
+    // en-GB 12-hour renders "11:30 pm"; the design brief wants "11.30 pm WIB".
+    const en = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Jakarta',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    })
+      .format(date)
+      .replace(':', '.');
+    return `${en} WIB`;
+  }
+  const id = new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  }).format(date);
+  return `${id} WIB`;
+}
+
 module.exports = {
   OTP_TTL_MS,
   OTP_RESEND_COOLDOWN_MS,
@@ -39,5 +83,7 @@ module.exports = {
   OTP_CODE_LENGTH,
   hmacCode,
   generateCode,
-  normalizeEmail
+  normalizeEmail,
+  spaceOtpCode,
+  formatOtpExpiry
 };

@@ -34,7 +34,7 @@ function createOtpUseCase({ store, mailer, tokens, logger, otpSecret }) {
      * (no account enumeration). Rate limits (openapi.yaml): 60 s resend
      * cooldown, 3 sends per email per 10 minutes.
      */
-    async requestOtp({ email, fullName, locale, deviceId }) {
+    async requestOtp({ email, locale, deviceId }) {
       const normalized = normalizeEmail(email);
       const at = new Date();
 
@@ -53,7 +53,6 @@ function createOtpUseCase({ store, mailer, tokens, logger, otpSecret }) {
         email: normalized,
         codeHash: hmacCode(code, otpSecret),
         deviceId: deviceId || null,
-        fullName: fullName || null,
         locale: locale || 'id',
         expiresAt: new Date(at.getTime() + OTP_TTL_MS)
       });
@@ -61,7 +60,7 @@ function createOtpUseCase({ store, mailer, tokens, logger, otpSecret }) {
       await store.expireOtpChallengesForEmail(normalized, challenge.id);
 
       try {
-        await mailer.sendOtp({ to: normalized, code, locale: locale || 'id' });
+        await mailer.sendOtp({ to: normalized, code, locale: locale || 'id', expiresAt: challenge.expiresAt });
       } catch (error) {
         // The code was never delivered: drop the challenge so a retry is
         // not rate-limited, and answer 503 retryable (LLD-01 §7).
@@ -124,11 +123,7 @@ function createOtpUseCase({ store, mailer, tokens, logger, otpSecret }) {
         account = await store.createAccount({ email: challenge.email });
       }
 
-      let profile = await store.findProfile(account.id);
-      if (isNewAccount && challenge.fullName) {
-        profile = await store.upsertProfile(account.id, { name: challenge.fullName, locale: challenge.locale });
-        account.profileComplete = true;
-      }
+      const profile = await store.findProfile(account.id);
 
       log.info('otp_verified');
       const session = await issueSession({

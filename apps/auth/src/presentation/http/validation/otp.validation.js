@@ -4,8 +4,6 @@ const { schemas } = require('@rusuh/contracts');
 /** OTP request body (openapi.yaml requestOtp). */
 const requestOtpSchema = Joi.object({
   email: schemas.email,
-  fullName: Joi.string().trim().min(1).max(200).optional(),
-  consentVersion: Joi.string().optional(),
   locale: Joi.string().valid('id', 'en').default('id'),
   deviceId: Joi.string().optional()
 });

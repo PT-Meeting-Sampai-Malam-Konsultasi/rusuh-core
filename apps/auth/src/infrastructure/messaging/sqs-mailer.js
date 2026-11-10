@@ -1,23 +1,36 @@
 const { SQSClient, SendMessageCommand } = require('@aws-sdk/client-sqs');
-const { SQS_QUEUES } = require('@rusuh/contracts').constants;
+const { formatOtpExpiry, spaceOtpCode } = require('@/domain/otp');
 
 /**
- * SQS OTP mailer (Q34): enqueues `{to, template: "otp", code}` for the
- * notification-module (LLD-04), which sends the email via SES. The OTP code
+ * SQS OTP mailer (Q34): enqueues an EMAIL_OTP job for the notification-module
+ * (LLD-04), which renders the e-mail and sends it via SES. The envelope
+ * follows the notification contract (application/email/email.validation.js):
+ * {type, to, locale, variables:{code, code_spaced, expires_at, email}}.
+ * Values are pre-formatted here (the templates do no formatting). The code
  * is in the message (transient; SQS is encrypted in transit + at rest) and
  * is NEVER written to logs.
  *
- * @param {object} config - { sqsQueueUrl, awsRegion, environment }.
+ * @param {object} config - { sqsQueueUrl, awsRegion }.
  * @returns {object} Mailer.
  */
-function createSqsMailer({ sqsQueueUrl, awsRegion, environment = 'dev' }) {
-  const queueUrl = sqsQueueUrl || SQS_QUEUES.notification.replace('{env}', environment);
+function createSqsMailer({ sqsQueueUrl, awsRegion }) {
   const client = new SQSClient({ region: awsRegion || 'ap-southeast-3' });
 
   return {
-    async sendOtp({ to, code, locale }) {
-      const body = JSON.stringify({ to, template: 'otp', code, locale: locale || 'id' });
-      await client.send(new SendMessageCommand({ QueueUrl: queueUrl, MessageBody: body }));
+    async sendOtp({ to, code, locale, expiresAt }) {
+      const language = locale || 'id';
+      const body = JSON.stringify({
+        type: 'EMAIL_OTP',
+        to,
+        locale: language,
+        variables: {
+          code,
+          code_spaced: spaceOtpCode(code),
+          expires_at: formatOtpExpiry(expiresAt, language),
+          email: to
+        }
+      });
+      await client.send(new SendMessageCommand({ QueueUrl: sqsQueueUrl, MessageBody: body }));
     },
 
     async close() {

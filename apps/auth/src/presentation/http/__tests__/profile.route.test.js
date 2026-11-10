@@ -13,8 +13,12 @@ describe('GET /v1/me + /v1/auth/profile', () => {
     await dependencies.store.close();
   });
 
-  it('GET /v1/me returns the profile for a valid token', async () => {
-    const session = await loginViaOtp(app, dependencies.mailer, 'rina@example.com', 'Rina');
+  it('GET /v1/me returns the profile after the name is set via PUT', async () => {
+    const session = await loginViaOtp(app, dependencies.mailer, 'rina@example.com');
+    await request(app)
+      .put('/v1/auth/profile')
+      .set('Authorization', `Bearer ${session.accessToken}`)
+      .send({ fullName: 'Rina' });
     const response = await request(app).get('/v1/me').set('Authorization', `Bearer ${session.accessToken}`);
     expect(response.status).toBe(200);
     expect(response.body).toEqual(
@@ -23,7 +27,11 @@ describe('GET /v1/me + /v1/auth/profile', () => {
   });
 
   it('GET /v1/auth/profile (LLD-01 alias) returns the same profile', async () => {
-    const session = await loginViaOtp(app, dependencies.mailer, 'budi@example.com', 'Budi');
+    const session = await loginViaOtp(app, dependencies.mailer, 'budi@example.com');
+    await request(app)
+      .put('/v1/auth/profile')
+      .set('Authorization', `Bearer ${session.accessToken}`)
+      .send({ fullName: 'Budi' });
     const response = await request(app).get('/v1/auth/profile').set('Authorization', `Bearer ${session.accessToken}`);
     expect(response.status).toBe(200);
     expect(response.body.fullName).toBe('Budi');

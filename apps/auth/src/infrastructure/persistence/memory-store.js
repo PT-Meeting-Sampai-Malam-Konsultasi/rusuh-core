@@ -69,13 +69,12 @@ function createMemoryStore() {
     },
 
     // -- OTP challenges ---------------------------------------------------
-    async createOtpChallenge({ email, codeHash, deviceId, fullName, locale, expiresAt }) {
+    async createOtpChallenge({ email, codeHash, deviceId, locale, expiresAt }) {
       const challenge = {
         id: `ch_${crypto.randomBytes(12).toString('base64url')}`,
         email,
         codeHash,
         deviceId: deviceId || null,
-        fullName: fullName || null,
         locale: locale || 'id',
         purpose: null,
         expiresAt,
