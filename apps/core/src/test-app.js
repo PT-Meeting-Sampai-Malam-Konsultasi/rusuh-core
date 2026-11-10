@@ -56,6 +56,9 @@ async function createTestApp({
   const dukcapil = {
     verify: async () => ({ valid: dukcapilValid, reason: dukcapilReason })
   };
+  const accounts = {
+    getAccount: async (id) => ({ id, email: 'buyer@example.com', locale: 'id', fullName: 'Edy Supardi' })
+  };
   const paymentStub = {
     isStub: false,
     createSnap: async ({ orderId }) => ({
@@ -85,7 +88,7 @@ async function createTestApp({
     requireServiceKey: createRequireServiceKey({ serviceKey })
   };
 
-  const deps = createDefaultDeps(config, { store, stock, dukcapil, payment: paymentStub, eventBus, auth });
+  const deps = createDefaultDeps(config, { store, stock, dukcapil, payment: paymentStub, eventBus, accounts, auth });
   const app = createApp({ config, deps });
   return { app, deps, admissionToken, accountToken: 'test-account-token' };
 }

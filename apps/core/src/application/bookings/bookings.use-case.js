@@ -4,6 +4,7 @@ const { generateBookingId, generateTicketId, generateOrderCode, ticketCode, qrPa
 const { encryptNik } = require('@/domain/nik');
 const { verifyValidationToken } = require('@/domain/validation-token');
 const { serverNow } = require('@/domain/presenters');
+const { buildTicketEnvelope, buildExpiredEnvelope, buildRefundFlaggedEnvelope } = require('@/domain/email-envelope');
 const { MAX_SEATS_PER_NIK, MAX_TICKETS_PER_ORDER } = require('@rusuh/contracts').constants;
 
 const SELECTION_TTL_MS = 5 * 60 * 1000;
@@ -19,6 +20,10 @@ const PAYMENT_TTL_MS = 10 * 60 * 1000;
  * @param {object} deps.stock - StockPort (live stock adapter: Lua hold/release/settle, admission).
  * @param {object} deps.payment - PaymentPort (payment-module internal client).
  * @param {object} deps.eventBus - EventBusPort (empty-slot, email jobs).
+ * @param {object} deps.accounts - AuthPort (getAccount: buyer e-mail + locale
+ *   for the e-mail envelopes, LLD-04 §3 `to` = account e-mail).
+ * @param {object} deps.emailConfig - E-mail link/label config ({ webBaseUrl,
+ *   refundWindowLabel } from the service config).
  * @param {Buffer} deps.nikEncryptionKey - 32-byte key for NIK ciphertext + tokens.
  * @param {string} deps.qrKey - HMAC key for the QR payload signature.
  * @param {object} deps.fees - Fee config ({ platformFee, adminFee, ppnRate, tax2Rate, tax2Base, tax2Label }).
@@ -27,9 +32,23 @@ const PAYMENT_TTL_MS = 10 * 60 * 1000;
  *   (booking, caller) => boolean. The use case never imports presentation/.
  * @returns {object} Booking use case.
  */
-function createBookingUseCase({ store, stock, payment, eventBus, nikEncryptionKey, qrKey, fees, mayAccessBooking }) {
+function createBookingUseCase({
+  store,
+  stock,
+  payment,
+  eventBus,
+  accounts,
+  emailConfig,
+  nikEncryptionKey,
+  qrKey,
+  fees,
+  mayAccessBooking
+}) {
   if (typeof mayAccessBooking !== 'function') {
     throw new Error('createBookingUseCase requires mayAccessBooking (injected by the container)');
+  }
+  if (!accounts || typeof accounts.getAccount !== 'function') {
+    throw new Error('createBookingUseCase requires accounts (auth-module client, injected by the container)');
   }
   function luaItems(booking) {
     // Group tickets by category; collect the NIK HMACs per category.
@@ -64,15 +83,47 @@ function createBookingUseCase({ store, stock, payment, eventBus, nikEncryptionKe
     });
   }
 
-  async function enqueueEmail(booking, type) {
-    const logged = await store.logEmail(booking.bookingId, type);
+  /**
+   * Publishes one booking e-mail as a notification-module envelope
+   * (LLD-04 §3). Best-effort AFTER the terminal transition (Point 6 /
+   * NFR-10): an account-lookup or enqueue failure is logged, never thrown —
+   * the booking flow must not fail because delivery failed. Dedup stays in
+   * email_log (bookingId, type UNIQUE); a failed enqueue releases the claim
+   * so a redelivered webhook can retry.
+   *
+   * @param {object} booking - Terminal booking (PAID / EXPIRED).
+   * @param {Function} build - (account, event, links) => envelope.
+   * @returns {Promise<boolean>} True when a job was enqueued.
+   */
+  async function enqueueBookingEmail(booking, build) {
+    let account = null;
+    try {
+      account = await accounts.getAccount(booking.accountId);
+    } catch (error) {
+      console.error(`[core] account lookup for booking ${booking.bookingId} e-mail failed: ${error.message}`);
+      return false;
+    }
+    if (!account || !account.email) {
+      console.warn(`[core] no account e-mail for booking ${booking.bookingId}; e-mail skipped`);
+      return false;
+    }
+    const event = await store.getEvent(booking.eventId);
+    const links = {
+      ticketUrl: `${emailConfig.webBaseUrl}/bookings/${booking.bookingId}`,
+      downloadAllUrl: `${emailConfig.webBaseUrl}/bookings/${booking.bookingId}?download=all`,
+      eventUrl: `${emailConfig.webBaseUrl}/queue?event=${booking.eventId}`
+    };
+    const envelope = build(account, event, links);
+
+    const logged = await store.logEmail(booking.bookingId, envelope.type);
     if (!logged) return false; // dedup: (bookingId, type) UNIQUE
-    await eventBus.sendEmailJob({
-      booking_id: booking.bookingId,
-      type,
-      to: booking.accountId,
-      payload: { eventId: booking.eventId, orderCode: booking.orderCode }
-    });
+    try {
+      await eventBus.sendEmailJob(envelope);
+    } catch (error) {
+      await store.releaseEmailLog(booking.bookingId, envelope.type);
+      console.error(`[core] ${envelope.type} enqueue failed for booking ${booking.bookingId}: ${error.message}`);
+      return false;
+    }
     return true;
   }
 
@@ -401,9 +452,22 @@ function createBookingUseCase({ store, stock, payment, eventBus, nikEncryptionKe
       if (!booking) return { handled: false, reason: 'not_found' };
       if (booking.status === 'PAID') return { handled: true, duplicate: true, booking };
       if (booking.status === 'EXPIRED' || booking.status === 'CANCELLED') {
-        // Late payment (D11): log + flag for admin review, no resurrection.
+        // Late payment (D11): log + flag for admin review, no resurrection —
+        // and tell the buyer their money will be returned (ADR-0009).
         await store.updateBooking(bookingId, { refundRequired: true });
-        return { handled: true, late: true, booking: await store.getBooking(bookingId) };
+        const flagged = await store.getBooking(bookingId);
+        await enqueueBookingEmail(flagged, (account, event) =>
+          buildRefundFlaggedEnvelope({
+            account,
+            booking: flagged,
+            event,
+            transactionId,
+            paymentType,
+            paidAt: new Date().toISOString(),
+            refundWindowLabel: emailConfig.refundWindowLabel
+          })
+        );
+        return { handled: true, late: true, booking: flagged };
       }
       if (booking.status !== 'PAYMENT_PENDING') return { handled: false, reason: 'not_held' };
       if (grossAmount !== undefined && grossAmount !== booking.price.total.amount) {
@@ -422,7 +486,9 @@ function createBookingUseCase({ store, stock, payment, eventBus, nikEncryptionKe
       const withTickets = await store.updateBooking(bookingId, { tickets: minted });
       await settleHold(paid);
       await publishEmptySlot(paid, 'purchase_complete');
-      await enqueueEmail(paid, 'e-ticket');
+      await enqueueBookingEmail(withTickets, (account, event, links) =>
+        buildTicketEnvelope({ account, booking: withTickets, event, tickets: minted, links })
+      );
       return { handled: true, booking: withTickets, orderId, transactionId, transactionStatus };
     },
 
@@ -447,7 +513,9 @@ function createBookingUseCase({ store, stock, payment, eventBus, nikEncryptionKe
         } catch (_error) {
           // Best-effort only.
         }
-        await enqueueEmail(expired, 'expired');
+        await enqueueBookingEmail(expired, (account, event, links) =>
+          buildExpiredEnvelope({ account, booking: expired, event, links })
+        );
         await publishEmptySlot(expired, reason);
       }
       return expired;

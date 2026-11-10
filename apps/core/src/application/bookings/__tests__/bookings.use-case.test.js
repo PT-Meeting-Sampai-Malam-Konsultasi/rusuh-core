@@ -41,6 +41,10 @@ function buildUseCase({ payment } = {}) {
       expire: async () => {}
     },
     eventBus,
+    accounts: {
+      getAccount: async (id) => ({ id, email: 'buyer@example.com', locale: 'id', fullName: 'Edy Supardi' })
+    },
+    emailConfig: { webBaseUrl: 'https://web.test', refundWindowLabel: { id: '14 hari kerja', en: '14 business days' } },
     nikHmacKey: 'test-hmac-key',
     nikEncryptionKey: NIK_KEY,
     qrKey: 'test-qr-key',
@@ -131,6 +135,62 @@ describe('booking use case (state transitions)', () => {
     expect((await store.getBooking(booking.bookingId)).refundRequired).toBe(true);
     expect(await store.listTicketsByAccount('acc_1')).toHaveLength(0);
     expect(eventBus.emptySlotEvents).toHaveLength(1); // from the expiry only
+    // Expiry enqueued EMAIL_EXPIRED, the late settlement EMAIL_REFUND_FLAGGED
+    // (ADR-0009) — both addressed to the buyer's real e-mail (LLD-04 §3).
+    expect(eventBus.emailJobs.map((job) => job.type)).toEqual(['EMAIL_EXPIRED', 'EMAIL_REFUND_FLAGGED']);
+    const refund = eventBus.emailJobs[1];
+    expect(refund.to).toBe('buyer@example.com');
+    expect(refund.booking_id).toBe(booking.bookingId);
+    expect(refund.variables.transaction_id).toBe('txn_late');
+    expect(refund.variables.payment_method).toBe('GoPay');
+    expect(refund.variables.refund_window).toBe('14 hari kerja');
+    expect(refund.variables.order_code).toBe(booking.orderCode);
+  });
+
+  it('enqueues the EMAIL_TICKET envelope to the buyer on settlement', async () => {
+    const { store, stock, eventBus, useCase } = buildUseCase();
+    await stock.setAdmission(
+      'adm_1',
+      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1', max_tickets: 3 },
+      60000
+    );
+    const { booking } = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+    await useCase.enterPayment(booking.bookingId, { account: { sub: 'acc_1' }, admission: { token: 'adm_1' } });
+    const result = await useCase.confirmPayment(booking.bookingId, {
+      orderId: `${booking.bookingId}-1`,
+      transactionId: 'txn_ok',
+      transactionStatus: 'settlement',
+      paymentType: 'bank_transfer',
+      grossAmount: 3548300
+    });
+    expect(result.handled).toBe(true);
+    expect(eventBus.emailJobs).toHaveLength(1);
+    const envelope = eventBus.emailJobs[0];
+    expect(envelope.type).toBe('EMAIL_TICKET');
+    expect(envelope.to).toBe('buyer@example.com');
+    expect(envelope.locale).toBe('id');
+    expect(envelope.booking_id).toBe(booking.bookingId);
+    expect(envelope.variables.order_code).toBe(booking.orderCode);
+    expect(envelope.variables.total).toBe('Rp 3.548.300');
+    expect(envelope.variables.payment_method).toBe('Transfer bank');
+    expect(envelope.variables.count).toBe(1);
+    expect(envelope.variables.tickets).toHaveLength(1);
+    expect(envelope.variables.tickets[0]).toMatchObject({
+      index: 1,
+      category: 'VIP',
+      holder_name: 'Edy Supardi',
+      ticket_code: expect.stringMatching(/^SMD-VIP-/)
+    });
+    // A duplicate webhook does not enqueue a second e-mail (email_log dedup).
+    await useCase.confirmPayment(booking.bookingId, {
+      orderId: `${booking.bookingId}-1`,
+      transactionId: 'txn_ok',
+      transactionStatus: 'settlement',
+      paymentType: 'bank_transfer',
+      grossAmount: 3548300
+    });
+    expect(eventBus.emailJobs).toHaveLength(1);
+    expect(await store.getBooking(booking.bookingId)).toMatchObject({ status: 'PAID' });
   });
 
   it('createDefaultDeps builds a working graph in test mode', () => {

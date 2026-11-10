@@ -161,7 +161,7 @@ describe('bookings journey (D5)', () => {
     expect(deps.eventBus.emptySlotEvents).toHaveLength(1);
     expect(deps.eventBus.emptySlotEvents[0].reason).toBe('expired');
     expect(deps.eventBus.emailJobs).toHaveLength(1);
-    expect(deps.eventBus.emailJobs[0].type).toBe('expired');
+    expect(deps.eventBus.emailJobs[0].type).toBe('EMAIL_EXPIRED');
   });
 
   it('accepts a payment-result webhook (service key) and mints tickets', async () => {

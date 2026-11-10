@@ -242,6 +242,11 @@ class MemoryStore {
     return true;
   }
 
+  /** Releases a failed send's dedup claim so a retry can re-enqueue. */
+  async releaseEmailLog(bookingId, type) {
+    this.emailLog.delete(`${bookingId}:${type}`);
+  }
+
   async listDueBookings(nowIsoString, limit = 100) {
     const now = new Date(nowIsoString).getTime();
     return [...this.bookings.values()]
@@ -515,6 +520,11 @@ class PgStore {
       [bookingId, type]
     );
     return rowCount === 1;
+  }
+
+  /** Releases a failed send's dedup claim so a retry can re-enqueue. */
+  async releaseEmailLog(bookingId, type) {
+    await this.pool.query('DELETE FROM email_log WHERE booking_id = $1 AND type = $2', [bookingId, type]);
   }
 
   async listDueBookings(nowIsoString, limit = 100) {

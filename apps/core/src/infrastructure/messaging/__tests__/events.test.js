@@ -48,33 +48,26 @@ describe('SqsEventBus (live SQS adapter, fake client)', () => {
     expect(sent.id).toBe('evt-uuid-1');
   });
 
-  it('sendEmailJob generates enqueued_at when missing and sends to the notification queue', async () => {
+  it('sendEmailJob sends the envelope verbatim to the notification queue', async () => {
     const client = fakeSqsClient();
     const bus = new SqsEventBus({
       client,
       emptySlotQueueUrl: 'https://sqs/empty-slot',
       notificationQueueUrl: 'https://sqs/notification'
     });
-    const job = { booking_id: 'bk_1', type: 'e-ticket', to: 'a@example.com', payload: {} };
-    const sent = await bus.sendEmailJob(job);
-    expect(sent.enqueued_at).toBeDefined();
+    // notification-module validates the SQS body strictly (unknown(false)):
+    // the bus must not add wrapper keys (e.g. enqueued_at) to the envelope.
+    const envelope = {
+      type: 'EMAIL_TICKET',
+      to: 'buyer@example.com',
+      locale: 'id',
+      booking_id: 'bk_1',
+      variables: { order_code: 'RSH-ABC-123' }
+    };
+    const sent = await bus.sendEmailJob(envelope);
+    expect(sent).toBe(envelope);
     expect(client.send).toHaveBeenCalledTimes(1);
     expect(client.sent[0].input.QueueUrl).toBe('https://sqs/notification');
-  });
-
-  it('sendEmailJob keeps a provided enqueued_at', async () => {
-    const client = fakeSqsClient();
-    const bus = new SqsEventBus({
-      client,
-      emptySlotQueueUrl: 'https://sqs/empty-slot',
-      notificationQueueUrl: 'https://sqs/notification'
-    });
-    const sent = await bus.sendEmailJob({
-      booking_id: 'bk_1',
-      type: 'expired',
-      to: 'a@example.com',
-      enqueued_at: '2026-11-07T00:00:00.000Z'
-    });
-    expect(sent.enqueued_at).toBe('2026-11-07T00:00:00.000Z');
+    expect(JSON.parse(client.sent[0].input.MessageBody)).toEqual(envelope);
   });
 });

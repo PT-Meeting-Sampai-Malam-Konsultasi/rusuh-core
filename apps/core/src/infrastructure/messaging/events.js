@@ -25,16 +25,6 @@ function emptySlotEvent({ eventId, released, releasedIds, reason }) {
   };
 }
 
-function emailJob({ bookingId, type, to, payload }) {
-  return {
-    booking_id: bookingId,
-    type, // 'e-ticket' | 'expired'
-    to,
-    ...payload,
-    enqueued_at: new Date().toISOString()
-  };
-}
-
 class MemoryEventBus {
   constructor() {
     this.emptySlotEvents = [];
@@ -47,10 +37,9 @@ class MemoryEventBus {
     return full;
   }
 
-  async sendEmailJob(job) {
-    const full = job.enqueued_at ? job : emailJob(job);
-    this.emailJobs.push(full);
-    return full;
+  async sendEmailJob(envelope) {
+    this.emailJobs.push(envelope);
+    return envelope;
   }
 }
 
@@ -85,10 +74,11 @@ class SqsEventBus {
     return this._send(this.emptySlotQueueUrl, full);
   }
 
-  async sendEmailJob(job) {
-    const full = job.enqueued_at ? job : emailJob(job);
-    return this._send(this.notificationQueueUrl, full);
+  async sendEmailJob(envelope) {
+    // The envelope is sent as-is: notification-module validates the SQS body
+    // strictly (unknown(false)), so no wrapper keys may be added here.
+    return this._send(this.notificationQueueUrl, envelope);
   }
 }
 
-module.exports = { MemoryEventBus, SqsEventBus, emptySlotEvent, emailJob };
+module.exports = { MemoryEventBus, SqsEventBus, emptySlotEvent };

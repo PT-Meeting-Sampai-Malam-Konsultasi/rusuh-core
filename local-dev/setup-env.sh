@@ -6,7 +6,7 @@
 #
 # What it generates (local-only secrets, never commit .env):
 #   - random 32-byte base64 keys: NIK_ENCRYPTION_KEY, NIK_HMAC_KEY,
-#     QR_HMAC_KEY, OTP_SECRET, SERVICE_KEY (core<->payment internal auth)
+#     QR_HMAC_KEY, OTP_SECRET, SERVICE_KEY (core<->payment and core<->auth internal auth)
 #   - one Ed25519 keypair (Node crypto): private JWK -> auth,
 #     public JWK -> core / officer / admin (Q43, account-JWT verification)
 #   - the shared local URLs (Postgres, Valkey, LocalStack, Dukcapil mock)
@@ -82,12 +82,14 @@ write_env auth 8081 \
   "SQS_QUEUE_URL=$OTP_Q" \
   "AUTH_JWT_PRIVATE_KEY_JWK=$PRIV_JWK" \
   "AUTH_JWT_KID=$KID" \
-  "OTP_SECRET=$OTP_SECRET"
+  "OTP_SECRET=$OTP_SECRET" \
+  "SERVICE_KEY=$SERVICE_KEY"
 
 write_env core 8082 \
   "VALKEY_URL=$VALKEY_URL" \
   "DUKCAPIL_URL=http://localhost:18082" \
   "PAYMENT_URL=http://localhost:8083" \
+  "AUTH_URL=http://localhost:8081" \
   "SERVICE_KEY=$SERVICE_KEY" \
   "SQS_ADMISSION_QUEUE_URL=$ADMISSION_Q" \
   "SQS_EMPTY_SLOT_QUEUE_URL=$EMPTY_SLOT_Q" \
@@ -99,7 +101,7 @@ write_env core 8082 \
   "AUTH_AUDIENCE=rusuh-api" \
   "AUTH_ISSUER=rusuh-auth" \
   "PLATFORM_FEE_IDR=30000" \
-  "ADMIN_FEE_IDR=15000" \
+  "ADMIN_FEE_IDR=0" \
   "PPN_RATE=0.11" \
   "TAX2_RATE=0" \
   "TAX2_LABEL=Pajak Lainnya"
@@ -122,6 +124,7 @@ write_env notification 8084 \
   "WORKER_ENABLED=true"
 
 write_env officer 8085 \
+  "VALKEY_URL=$VALKEY_URL" \
   "NIK_ENCRYPTION_KEY=$NIK_ENC" \
   "AUTH_PUBLIC_KEYS_JSON=$PUB_MAP_JSON" \
   "AUTH_AUDIENCE=rusuh-api" \

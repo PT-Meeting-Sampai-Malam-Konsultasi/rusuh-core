@@ -25,6 +25,9 @@ const environmentSchema = Joi.object({
   // Downstream services (internal). Unset = stub mode (local dev).
   DUKCAPIL_URL: Joi.string().uri().default('http://localhost:18082'),
   PAYMENT_URL: Joi.string().uri().allow(''),
+  // Buyer e-mail lookup (core -> auth internal). Unset = stub mode: booking
+  // e-mails are skipped (no buyer address can be resolved).
+  AUTH_URL: Joi.string().uri().allow(''),
   SERVICE_KEY: Joi.string().allow(''),
   // SQS (ADR-0023). Unset = in-memory event bus (local dev).
   // Only empty-slot (core -> queue) and notification (core ->
@@ -50,6 +53,12 @@ const environmentSchema = Joi.object({
   TAX2_RATE: Joi.number().min(0).max(1).default(0),
   TAX2_BASE: Joi.number().integer().valid(0, 1, 2).default(0),
   TAX2_LABEL: Joi.string().default('Pajak Lainnya'),
+  // E-mail links + refund window (rusuh-web#46). ticket/download links point
+  // at the web booking page; event_url = {web}/queue?event={id} per the issue.
+  WEB_BASE_URL: Joi.string().uri().default('https://rusuh-tiket.web.id'),
+  // Refund window text comes from Finance (sample "14 hari kerja", to confirm).
+  REFUND_WINDOW_LABEL: Joi.string().default('14 hari kerja'),
+  REFUND_WINDOW_LABEL_EN: Joi.string().default('14 business days'),
   // Background workers.
   SWEEP_INTERVAL_MS: Joi.number().integer().positive().default(30000),
   DUKCAPIL_TIMEOUT_MS: Joi.number().integer().positive().default(2000),
@@ -95,7 +104,10 @@ function loadEnvironment(environment = process.env) {
     valkeyUrl: value.VALKEY_URL || null,
     dukcapilUrl: value.DUKCAPIL_URL,
     paymentUrl: value.PAYMENT_URL || null,
+    authUrl: value.AUTH_URL || null,
     serviceKey: value.SERVICE_KEY || null,
+    webBaseUrl: value.WEB_BASE_URL,
+    refundWindowLabel: { id: value.REFUND_WINDOW_LABEL, en: value.REFUND_WINDOW_LABEL_EN },
     awsRegion: value.AWS_REGION,
     sqsEmptySlotQueueUrl: value.SQS_EMPTY_SLOT_QUEUE_URL || null,
     sqsNotificationQueueUrl: value.SQS_NOTIFICATION_QUEUE_URL || null,

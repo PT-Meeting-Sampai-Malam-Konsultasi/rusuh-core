@@ -43,7 +43,7 @@ function createApp({ config, platform = defaultPlatform, isReady, dependencies }
   );
   app.use(express.urlencoded({ extended: true, limit: config.bodyLimit }));
 
-  mountRoutes(app, { platform, isReady, dependencies: deps });
+  mountRoutes(app, { platform, isReady, dependencies: deps, config });
   app.use(notFound);
   app.use(createErrorHandler({ platform }));
 

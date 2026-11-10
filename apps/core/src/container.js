@@ -16,6 +16,7 @@ const { MemoryStore, PgStore } = require('./infrastructure/persistence/store');
 const { MemoryStock, RedisStock } = require('./infrastructure/cache/stock');
 const { DukcapilClient } = require('./infrastructure/external/dukcapil');
 const { PaymentClient } = require('./infrastructure/external/payment');
+const { AuthClient } = require('./infrastructure/external/auth');
 const { MemoryEventBus, SqsEventBus } = require('./infrastructure/messaging/events');
 const { Sweeper } = require('./infrastructure/sweeper');
 
@@ -55,6 +56,8 @@ function buildUseCases({
   dukcapil,
   payment,
   eventBus,
+  accounts,
+  emailConfig,
   nikHmacKey,
   nikEncryptionKey,
   qrKey,
@@ -72,6 +75,8 @@ function buildUseCases({
       stock,
       payment,
       eventBus,
+      accounts,
+      emailConfig,
       nikEncryptionKey,
       qrKey,
       fees,
@@ -114,6 +119,12 @@ function createDefaultDeps(config, overrides = {}) {
     overrides.dukcapil || new DukcapilClient({ baseUrl: config.dukcapilUrl, timeoutMs: config.dukcapilTimeoutMs });
   const payment = overrides.payment || new PaymentClient({ baseUrl: config.paymentUrl, serviceKey: config.serviceKey });
   if (payment.isStub) warn('PAYMENT_URL not set: payment client runs in stub mode.');
+  const accounts = overrides.accounts || new AuthClient({ baseUrl: config.authUrl, serviceKey: config.serviceKey });
+  if (accounts.isStub) warn('AUTH_URL not set: booking e-mails are skipped (no buyer e-mail lookup).');
+  const emailConfig = {
+    webBaseUrl: config.webBaseUrl,
+    refundWindowLabel: config.refundWindowLabel
+  };
   const eventBus = overrides.eventBus || new MemoryEventBus();
   if (!overrides.eventBus && config.nodeEnv !== 'test') {
     warn('SQS queue URLs not set: using in-memory event bus (events are not delivered).');
@@ -138,6 +149,8 @@ function createDefaultDeps(config, overrides = {}) {
     dukcapil,
     payment,
     eventBus,
+    accounts,
+    emailConfig,
     nikHmacKey: config.nikHmacKey,
     nikEncryptionKey,
     qrKey: config.qrHmacKey,
@@ -163,6 +176,8 @@ function createDefaultDeps(config, overrides = {}) {
     stock,
     dukcapil,
     payment,
+    accounts,
+    emailConfig,
     eventBus,
     publicKeys,
     devPrivateJwk,

@@ -7,10 +7,12 @@ const { createApp } = require('./app');
  * Builds a fresh app with in-memory adapters (no Postgres/Valkey/AWS) and
  * a fixed OTP secret, for tests.
  *
+ * @param {object} [env] - Extra environment values (e.g. SERVICE_KEY for
+ *   the internal endpoints); merged over the empty base environment.
  * @returns {{app: import('express').Express, dependencies: object, config: object}}
  */
-function createTestApp() {
-  const config = loadEnvironment({});
+function createTestApp(env = {}) {
+  const config = loadEnvironment({ ...env });
   const dependencies = createDependencies({ ...config, otpSecret: 'test-otp-secret-0123456789abcdef' });
   const app = createApp({ config, dependencies });
   return { app, dependencies, config };
