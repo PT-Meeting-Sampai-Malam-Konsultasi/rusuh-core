@@ -1,9 +1,8 @@
 # Local real-test setup
 
-A real local test — not a smoke test. Postgres, Valkey, LocalStack
-(SQS + SES + S3) and the Dukcapil mock run in Docker; the six rusuh-core
-apps run on the host, so you can edit code and restart them like a normal
-Node developer.
+A real local test — not a smoke test. Postgres, Valkey, and LocalStack
+(SQS + SES + S3) run in Docker. The Dukcapil mock and six rusuh-core apps run
+on the host, so you can edit code and restart them like a normal Node developer.
 
 ## What runs where
 
@@ -11,8 +10,8 @@ Node developer.
 | ------------------------------------------------------------------------------------- | ------------------ | ------------------ |
 | Postgres 16 (`rusuh-postgres`, :5432)                                                 | Docker             | RDS Postgres       |
 | Valkey 7.2 (`rusuh-valkey`, :6379)                                                    | Docker             | ElastiCache Valkey |
-| LocalStack (`rusuh-localstack`, :4566)                                                | Docker             | SQS + SES + S3     |
-| Dukcapil mock (`rusuh-dukcapil`, :18082)                                              | Docker             | real Dukcapil      |
+| LocalStack 3.8.1 (`rusuh-localstack`, :4566)                                          | Docker             | SQS + SES + S3     |
+| Dukcapil mock (`rusuh-mock`, :18082)                                                  | Host (`npm start`) | real Dukcapil      |
 | auth :8081, core :8082, payment :8083, notification :8084, officer :8085, admin :8086 | Host (`npm start`) | —                  |
 
 LocalStack resources (created by the one-shot `localstack-init` container):
@@ -29,13 +28,12 @@ or CloudWatch/X-Ray (logs are JSON on stdout).
 ## Quick start
 
 ```sh
-# 0. Docker Desktop running. rusuh-mock must be cloned next to rusuh-core
-#    (../rusuh-mock) — the dukcapil image is built from it. If you do not
-#    have it, comment out the `dukcapil` service in docker-compose.yml and
-#    run the mock on the host: cd ../rusuh-mock/service-dukcapil && PORT=18082 npm start
+# 0. Docker Desktop running. Clone rusuh-mock next to rusuh-core,
+#    then start its Dukcapil mock on the host in a separate terminal:
+cd ../rusuh-mock/service-dukcapil && PORT=18082 npm start
 
-# 1. Start the infra
-docker compose -f local-dev/docker-compose.yml up -d
+# 1. Start Docker infrastructure (Postgres, Valkey, LocalStack)
+cd ../../rusuh-core && docker compose -f local-dev/docker-compose.yml up -d
 
 # 2. Write apps/*/.env (local URLs + generated keys; never committed)
 bash local-dev/setup-env.sh
