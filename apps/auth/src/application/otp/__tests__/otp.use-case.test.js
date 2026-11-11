@@ -26,6 +26,19 @@ describe('otp.use-case', () => {
       expect(mailer.sent[0].code).toMatch(/^[0-9]{6}$/);
     });
 
+    it('honours a configured OTP TTL (OTP_TTL_MS env)', async () => {
+      const store = createMemoryStore();
+      const mailer = createMemoryMailer();
+      const tokens = createTokenService({ logger: { info: () => {} } });
+      const logger = { info: jest.fn(), error: jest.fn() };
+      const useCase = createOtpUseCase({ store, mailer, tokens, logger, otpSecret: 'test-secret', otpTtlMs: 300000 });
+      const before = Date.now();
+      const result = await useCase.requestOtp({ email: 'ttl@example.com' });
+      const expiresInMs = new Date(result.expiresAt).getTime() - before;
+      expect(expiresInMs).toBeGreaterThan(240000);
+      expect(expiresInMs).toBeLessThanOrEqual(300000);
+    });
+
     it('enforces the 60 s resend cooldown', async () => {
       const { useCase } = buildUseCase();
       await useCase.requestOtp({ email: 'a@example.com' });

@@ -2,8 +2,9 @@ const crypto = require('crypto');
 
 /**
  * OTP domain rules (LLD-01 §7 + openapi.yaml limits).
- * Expiry 10 min (top of the decided 5–10 min range); resend cooldown 60 s;
- * 3 sends per email per 10 min; 5 verify attempts per challenge.
+ * Expiry defaults to 10 min (top of the decided 5–10 min range), overridable
+ * via the OTP_TTL_MS env var; resend cooldown 60 s; 3 sends per email per
+ * 10 min; 5 verify attempts per challenge.
  *
  * Pure: no I/O, no adapters — the use cases in application/ apply these
  * rules against the store/mailer/token ports.

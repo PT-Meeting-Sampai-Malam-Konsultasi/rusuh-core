@@ -23,9 +23,10 @@ const {
  * @param {import('@/domain/ports/token-service.port').TokenService} deps.tokens - JWT + refresh tokens.
  * @param {import('@/domain/ports/logger.port').Logger} deps.logger - Structured logger.
  * @param {string} deps.otpSecret - HMAC secret for OTP codes.
+ * @param {number} [deps.otpTtlMs] - OTP code lifetime in ms (default OTP_TTL_MS).
  * @returns {object} { requestOtp, verifyOtp }.
  */
-function createOtpUseCase({ store, mailer, tokens, logger, otpSecret }) {
+function createOtpUseCase({ store, mailer, tokens, logger, otpSecret, otpTtlMs = OTP_TTL_MS }) {
   const log = logger || { info: () => {}, error: () => {} };
 
   return {
@@ -54,7 +55,7 @@ function createOtpUseCase({ store, mailer, tokens, logger, otpSecret }) {
         codeHash: hmacCode(code, otpSecret),
         deviceId: deviceId || null,
         locale: locale || 'id',
-        expiresAt: new Date(at.getTime() + OTP_TTL_MS)
+        expiresAt: new Date(at.getTime() + otpTtlMs)
       });
       // One active code per email: expire previous unused challenges.
       await store.expireOtpChallengesForEmail(normalized, challenge.id);

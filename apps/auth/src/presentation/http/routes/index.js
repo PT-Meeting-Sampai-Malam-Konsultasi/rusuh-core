@@ -31,12 +31,12 @@ const { createInternalRouter } = require('@/presentation/http/routes/internal.ro
 function mountRoutes(app, { isReady, dependencies, config } = {}) {
   if (!dependencies) throw new Error('mountRoutes requires dependencies (built by the composition root)');
   const deps = dependencies;
-  const { store, denylist, mailer, tokens, logger, otpSecret } = deps;
+  const { store, denylist, mailer, tokens, logger, otpSecret, otpTtlMs } = deps;
 
   const healthUseCase = createHealthUseCase({ isReady });
   const healthController = createHealthController(healthUseCase);
 
-  const otpUseCase = createOtpUseCase({ store, mailer, tokens, logger, otpSecret });
+  const otpUseCase = createOtpUseCase({ store, mailer, tokens, logger, otpSecret, otpTtlMs });
   const otpController = createOtpController(otpUseCase);
 
   const sessionUseCase = createSessionUseCase({ store, denylist, tokens, logger });

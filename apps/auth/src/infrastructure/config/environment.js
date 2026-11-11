@@ -16,6 +16,9 @@ const environmentSchema = Joi.object({
   AUTH_JWT_KID: Joi.string().optional(),
   AUTH_JWT_PUBLIC_KEYS_JWKS: Joi.string().optional(),
   OTP_SECRET: Joi.string().optional(),
+  // OTP code lifetime in ms. Default 10 min (current behaviour); the login
+  // design shows 5 min — set OTP_TTL_MS=300000 to match it.
+  OTP_TTL_MS: Joi.number().integer().positive().default(600000),
   // Shared service credential for internal endpoints (core-module -> auth;
   // unset = the internal endpoints reject everything, fail-closed).
   SERVICE_KEY: Joi.string().allow('').optional(),
@@ -79,6 +82,7 @@ function loadEnvironment(environment = process.env) {
     jwtKid: value.AUTH_JWT_KID,
     jwtPublicKeysJwks: value.AUTH_JWT_PUBLIC_KEYS_JWKS,
     otpSecret: value.OTP_SECRET,
+    otpTtlMs: value.OTP_TTL_MS,
     serviceKey: value.SERVICE_KEY || null,
     corsOrigins: parseCorsOrigins(value.CORS_ORIGINS)
   };
