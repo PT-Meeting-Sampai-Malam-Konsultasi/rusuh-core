@@ -87,6 +87,20 @@ function createTokenService(config = {}) {
       return { token, tokenHash: hashRefreshToken(token) };
     },
 
+    /**
+     * The public JWKS served to sibling services (GET /.well-known/jwks.json).
+     * Keys are public-only (kty/crv/x + kid, never "d"); verifiers pick the
+     * right one by the token's kid. Includes every configured public key, so
+     * an old + new key can be served side by side during a rotation.
+     *
+     * @returns {{keys: Array<object>}} JWKS.
+     */
+    publicJwks() {
+      return {
+        keys: [...publicKeys.entries()].map(([keyId, jwk]) => ({ ...jwk, kid: keyId }))
+      };
+    },
+
     hashRefreshToken,
 
     /** Refresh family expiry: 7 days from login (rotation does not extend it). */

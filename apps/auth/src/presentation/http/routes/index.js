@@ -12,6 +12,8 @@ const { createProfileController } = require('@/presentation/http/controllers/pro
 const { createProfileRouter } = require('@/presentation/http/routes/profile.route');
 const { requireAccountToken } = require('@/presentation/http/middleware/auth');
 const { requireServiceKey } = require('@/presentation/http/middleware/service-key');
+const { createJwksController } = require('@/presentation/http/controllers/jwks.controller');
+const { createJwksRouter } = require('@/presentation/http/routes/jwks.route');
 const { createInternalUseCase } = require('@/application/internal/internal.use-case');
 const { createInternalController } = require('@/presentation/http/controllers/internal.controller');
 const { createInternalRouter } = require('@/presentation/http/routes/internal.route');
@@ -35,6 +37,7 @@ function mountRoutes(app, { isReady, dependencies, config } = {}) {
 
   const healthUseCase = createHealthUseCase({ isReady });
   const healthController = createHealthController(healthUseCase);
+  const jwksController = createJwksController(tokens);
 
   const otpUseCase = createOtpUseCase({ store, mailer, tokens, logger, otpSecret });
   const otpController = createOtpController(otpUseCase);
@@ -52,6 +55,7 @@ function mountRoutes(app, { isReady, dependencies, config } = {}) {
   const requireSvcKey = requireServiceKey({ serviceKey: config && config.serviceKey });
 
   app.use(createHealthRouter(healthController));
+  app.use(createJwksRouter(jwksController));
   app.use('/v1/auth', createOtpRouter(otpController));
   app.use('/v1/auth', createSessionRouter(sessionController, requireToken));
   app.use('/v1', createProfileRouter(profileController, requireToken));
