@@ -4,6 +4,7 @@ const { createStore } = require('@/infrastructure/persistence');
 const { createDenylist } = require('@/infrastructure/cache');
 const { createMailer } = require('@/infrastructure/messaging');
 const { createTokenService } = require('@/infrastructure/tokens/token-service');
+const { resolveEncryptionKey } = require('@/domain/nik');
 
 /**
  * Composition root: builds the auth-module dependencies from config.
@@ -13,7 +14,7 @@ const { createTokenService } = require('@/infrastructure/tokens/token-service');
  * (and is testable) without Postgres, Valkey, or AWS.
  *
  * @param {object} config - Runtime configuration (loadEnvironment).
- * @returns {object} { store, denylist, mailer, tokens, logger, otpSecret }.
+ * @returns {object} { store, denylist, mailer, tokens, logger, otpSecret, nikEncryptionKey }.
  */
 function createDependencies(config = {}) {
   const logger = createLogger({ service: 'auth-module' });
@@ -37,7 +38,14 @@ function createDependencies(config = {}) {
     logger.info('OTP_SECRET is not set; using an ephemeral secret. Set it in production.');
   }
 
-  return { store, denylist, mailer, tokens, logger, otpSecret };
+  // NIK encryption key (ADR-0031): same key core-module uses, so a profile
+  // NIK decrypts like a transaction NIK. Unset = fixed dev key.
+  const nikEncryptionKey = resolveEncryptionKey(config.nikEncryptionKey);
+  if (!config.nikEncryptionKey) {
+    logger.info('NIK_ENCRYPTION_KEY is not set; using a dev key. Set it in production.');
+  }
+
+  return { store, denylist, mailer, tokens, logger, otpSecret, nikEncryptionKey };
 }
 
 module.exports = { createDependencies };

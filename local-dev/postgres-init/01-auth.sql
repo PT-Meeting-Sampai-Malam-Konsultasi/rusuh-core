@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS profiles (
   account_id TEXT PRIMARY KEY REFERENCES accounts (id) ON DELETE CASCADE,
   name TEXT,
   locale TEXT NOT NULL DEFAULT 'id',
+  nik_ciphertext TEXT,
+  nik_masked TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

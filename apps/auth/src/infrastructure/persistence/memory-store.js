@@ -48,12 +48,15 @@ function createMemoryStore() {
       return profile ? { ...profile } : null;
     },
 
-    async upsertProfile(accountId, { name, locale }) {
+    async upsertProfile(accountId, { name, locale, nikCiphertext, nikMasked }) {
       const existing = profiles.get(accountId);
       const profile = {
         accountId,
         name: name ?? existing?.name ?? null,
         locale: locale ?? existing?.locale ?? 'id',
+        // NIK (ADR-0031): undefined = leave unchanged; null = clear it.
+        nikCiphertext: nikCiphertext !== undefined ? nikCiphertext : (existing?.nikCiphertext ?? null),
+        nikMasked: nikMasked !== undefined ? nikMasked : (existing?.nikMasked ?? null),
         createdAt: existing?.createdAt || now(),
         updatedAt: now()
       };

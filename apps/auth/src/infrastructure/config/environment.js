@@ -16,6 +16,10 @@ const environmentSchema = Joi.object({
   AUTH_JWT_KID: Joi.string().optional(),
   AUTH_JWT_PUBLIC_KEYS_JWKS: Joi.string().optional(),
   OTP_SECRET: Joi.string().optional(),
+  // NIK encryption key (ADR-0031): base64 of 32 bytes. MUST match the key
+  // core-module uses, so a profile NIK decrypts like a transaction NIK.
+  // Unset = a fixed dev key (never for production).
+  NIK_ENCRYPTION_KEY: Joi.string().allow('').optional(),
   // Shared service credential for internal endpoints (core-module -> auth;
   // unset = the internal endpoints reject everything, fail-closed).
   SERVICE_KEY: Joi.string().allow('').optional(),
@@ -79,6 +83,7 @@ function loadEnvironment(environment = process.env) {
     jwtKid: value.AUTH_JWT_KID,
     jwtPublicKeysJwks: value.AUTH_JWT_PUBLIC_KEYS_JWKS,
     otpSecret: value.OTP_SECRET,
+    nikEncryptionKey: value.NIK_ENCRYPTION_KEY || null,
     serviceKey: value.SERVICE_KEY || null,
     corsOrigins: parseCorsOrigins(value.CORS_ORIGINS)
   };

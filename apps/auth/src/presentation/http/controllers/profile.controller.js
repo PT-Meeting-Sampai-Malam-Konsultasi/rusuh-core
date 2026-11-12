@@ -26,7 +26,8 @@ function createProfileController(profileUseCase) {
         const user = await profileUseCase.updateProfile({
           accountId: request.account.accountId,
           fullName: value.fullName,
-          locale: value.locale
+          locale: value.locale,
+          nik: value.nik
         });
         response.locals.skipResponseEnvelope = true;
         response.status(200).json(user);

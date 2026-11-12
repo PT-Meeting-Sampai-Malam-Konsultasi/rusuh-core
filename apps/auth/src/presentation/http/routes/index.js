@@ -31,7 +31,7 @@ const { createInternalRouter } = require('@/presentation/http/routes/internal.ro
 function mountRoutes(app, { isReady, dependencies, config } = {}) {
   if (!dependencies) throw new Error('mountRoutes requires dependencies (built by the composition root)');
   const deps = dependencies;
-  const { store, denylist, mailer, tokens, logger, otpSecret } = deps;
+  const { store, denylist, mailer, tokens, logger, otpSecret, nikEncryptionKey } = deps;
 
   const healthUseCase = createHealthUseCase({ isReady });
   const healthController = createHealthController(healthUseCase);
@@ -42,7 +42,7 @@ function mountRoutes(app, { isReady, dependencies, config } = {}) {
   const sessionUseCase = createSessionUseCase({ store, denylist, tokens, logger });
   const sessionController = createSessionController(sessionUseCase);
 
-  const profileUseCase = createProfileUseCase({ store, logger });
+  const profileUseCase = createProfileUseCase({ store, logger, nikEncryptionKey });
   const profileController = createProfileController(profileUseCase);
 
   const requireToken = requireAccountToken({ tokens, denylist });

@@ -22,6 +22,8 @@ function createPostgresStore({ databaseUrl }) {
     accountId: row.account_id,
     name: row.name,
     locale: row.locale,
+    nikCiphertext: row.nik_ciphertext ?? null,
+    nikMasked: row.nik_masked ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   });
@@ -77,16 +79,21 @@ function createPostgresStore({ databaseUrl }) {
       return rows[0] ? mapProfile(rows[0]) : null;
     },
 
-    async upsertProfile(accountId, { name, locale }) {
+    async upsertProfile(accountId, { name, locale, nikCiphertext, nikMasked }) {
+      // NIK (ADR-0031): undefined = leave unchanged; null = clear it.
+      // The $6 flag tells the UPSERT whether the NIK columns are being set.
+      const updateNik = nikCiphertext !== undefined;
       const { rows } = await pool.query(
-        `INSERT INTO profiles (account_id, name, locale)
-         VALUES ($1, $2, $3)
+        `INSERT INTO profiles (account_id, name, locale, nik_ciphertext, nik_masked)
+         VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (account_id) DO UPDATE
            SET name = COALESCE(EXCLUDED.name, profiles.name),
                locale = COALESCE(EXCLUDED.locale, profiles.locale),
+               nik_ciphertext = CASE WHEN $6::boolean THEN EXCLUDED.nik_ciphertext ELSE profiles.nik_ciphertext END,
+               nik_masked = CASE WHEN $6::boolean THEN EXCLUDED.nik_masked ELSE profiles.nik_masked END,
                updated_at = now()
          RETURNING *`,
-        [accountId, name ?? null, locale ?? null]
+        [accountId, name ?? null, locale ?? null, nikCiphertext ?? null, nikMasked ?? null, updateNik]
       );
       if (name !== undefined && name !== null) {
         await pool.query('UPDATE accounts SET profile_complete = true, updated_at = now() WHERE id = $1', [accountId]);

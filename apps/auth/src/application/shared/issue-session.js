@@ -9,7 +9,7 @@ const crypto = require('crypto');
  * @param {object} options.store - Repository.
  * @param {object} options.tokens - Token service.
  * @param {object} options.account - Account { id, email, profileComplete }.
- * @param {object} [options.profile] - Profile { name, locale }.
+ * @param {object} [options.profile] - Profile { name, locale, nikMasked }.
  * @param {string} [options.deviceLabel] - Device label for the refresh row.
  * @param {string} [options.familyId] - Existing family (rotation) or new.
  * @param {Date} [options.familyExpiresAt] - Family expiry (rotation keeps it).
@@ -55,7 +55,8 @@ async function issueSession({
       userId: account.id,
       email: account.email,
       fullName: profile?.name ?? null,
-      locale: profile?.locale ?? 'id'
+      locale: profile?.locale ?? 'id',
+      nikMasked: profile?.nikMasked ?? null
     }
   };
 }
