@@ -17,38 +17,38 @@ jobs:
           - app: auth
             package: '@rusuh/auth-service'
             image: msmk-auth
-            ecs-service: msmk-demo-auth
-            ecs-task-family: msmk-demo-auth
+            ecs-service: msmk-prod-auth
+            ecs-task-family: msmk-prod-auth
             ecs-container: auth
           - app: core
             package: '@rusuh/core-service'
             image: msmk-core
-            ecs-service: msmk-demo-core
-            ecs-task-family: msmk-demo-core
+            ecs-service: msmk-prod-core
+            ecs-task-family: msmk-prod-core
             ecs-container: core
           - app: payment
             package: '@rusuh/payment-service'
             image: msmk-payment
-            ecs-service: msmk-demo-payment
-            ecs-task-family: msmk-demo-payment
+            ecs-service: msmk-prod-payment
+            ecs-task-family: msmk-prod-payment
             ecs-container: payment
           - app: notification
             package: '@rusuh/notification-service'
             image: msmk-notification
-            ecs-service: msmk-demo-notification
-            ecs-task-family: msmk-demo-notification
+            ecs-service: msmk-prod-notification
+            ecs-task-family: msmk-prod-notification
             ecs-container: notification
           - app: officer
             package: '@rusuh/officer-service'
             image: msmk-officer
-            ecs-service: msmk-demo-officer
-            ecs-task-family: msmk-demo-officer
+            ecs-service: msmk-prod-officer
+            ecs-task-family: msmk-prod-officer
             ecs-container: officer
           - app: admin
             package: '@rusuh/admin-service'
             image: msmk-admin
-            ecs-service: msmk-demo-admin
-            ecs-task-family: msmk-demo-admin
+            ecs-service: msmk-prod-admin
+            ecs-task-family: msmk-prod-admin
             ecs-container: admin
     uses: PT-Meeting-Sampai-Malam-Konsultasi/rusuh-infra/.github/workflows/backend-ci.yml@v1
     permissions:
@@ -75,38 +75,38 @@ jobs:
           - app: auth
             package: '@rusuh/auth-service'
             image: msmk-auth
-            ecs-service: msmk-demo-auth
-            ecs-task-family: msmk-demo-auth
+            ecs-service: msmk-prod-auth
+            ecs-task-family: msmk-prod-auth
             ecs-container: auth
           - app: core
             package: '@rusuh/core-service'
             image: msmk-core
-            ecs-service: msmk-demo-core
-            ecs-task-family: msmk-demo-core
+            ecs-service: msmk-prod-core
+            ecs-task-family: msmk-prod-core
             ecs-container: core
           - app: payment
             package: '@rusuh/payment-service'
             image: msmk-payment
-            ecs-service: msmk-demo-payment
-            ecs-task-family: msmk-demo-payment
+            ecs-service: msmk-prod-payment
+            ecs-task-family: msmk-prod-payment
             ecs-container: payment
           - app: notification
             package: '@rusuh/notification-service'
             image: msmk-notification
-            ecs-service: msmk-demo-notification
-            ecs-task-family: msmk-demo-notification
+            ecs-service: msmk-prod-notification
+            ecs-task-family: msmk-prod-notification
             ecs-container: notification
           - app: officer
             package: '@rusuh/officer-service'
             image: msmk-officer
-            ecs-service: msmk-demo-officer
-            ecs-task-family: msmk-demo-officer
+            ecs-service: msmk-prod-officer
+            ecs-task-family: msmk-prod-officer
             ecs-container: officer
           - app: admin
             package: '@rusuh/admin-service'
             image: msmk-admin
-            ecs-service: msmk-demo-admin
-            ecs-task-family: msmk-demo-admin
+            ecs-service: msmk-prod-admin
+            ecs-task-family: msmk-prod-admin
             ecs-container: admin
     uses: PT-Meeting-Sampai-Malam-Konsultasi/rusuh-infra/.github/workflows/backend-cd.yml@v1
     permissions:
