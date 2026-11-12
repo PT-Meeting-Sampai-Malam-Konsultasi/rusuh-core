@@ -1,0 +1,6 @@
+# Gitleaks allowlist (fingerprint: file:rule:line).
+# All three are fixed test fixtures, not credentials: the shared auth test
+# OTP secret and the fixed admission-token constant reused across core tests.
+/scan/apps/auth/src/test-helpers.js:generic-api-key:16
+/scan/apps/core/src/test-app.js:generic-api-key:46
+/scan/apps/core/src/presentation/http/middleware/__tests__/auth.test.js:generic-api-key:4
