@@ -1,4 +1,5 @@
-const { loadEnvironment, DEFAULT_CORS_ORIGINS } = require('../environment');
+const { DEFAULT_CORS_ORIGINS } = require('@rusuh/http');
+const { loadEnvironment } = require('../environment');
 
 describe('loadEnvironment', () => {
   it('defaults the port for this service', () => {

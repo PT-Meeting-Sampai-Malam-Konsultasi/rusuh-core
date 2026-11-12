@@ -2,7 +2,7 @@ require('./alias');
 
 const express = require('express');
 const helmet = require('helmet');
-const cors = require('cors');
+const { createCors } = require('@rusuh/http');
 const defaultPlatform = require('@/platform/common');
 const { createDuplicateKeyVerifier } = require('@/presentation/http/middleware/duplicate-json-keys');
 const { createResponseMiddleware } = require('@/presentation/http/middleware/response');
@@ -44,7 +44,7 @@ function createApp({
   // rendered) and CORS (origins from config.corsOrigins, see
   // infrastructure/config/environment.js). Both run before the routes.
   app.use(helmet());
-  app.use(cors({ origin: config.corsOrigins }));
+  app.use(createCors(config.corsOrigins));
   app.use(createResponseMiddleware({ platform }));
   app.use(
     express.json({
