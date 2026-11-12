@@ -13,7 +13,7 @@
 -- for them, and priceFrom is derived from the cheapest category (null here).
 -- Kelana starts at 19.00 WITA (UTC+8), hence its Asia/Makassar timezone.
 --
--- image_url follows https://cdn.rusuh.id/events/{eventId}/hero.svg (host TBD,
+-- image_url follows https://cdn.rusuh.id/events/{eventId}/hero.jpg (host TBD,
 -- see the CDN domain decision); files live in db/seed-assets/events/{eventId}/.
 
 BEGIN;
@@ -51,7 +51,7 @@ SELECT
   event_id, name, subtitle, format, venue, venue_short, city, timezone,
   starts_at::timestamptz, doors_open_at::timestamptz, sale_opens_at::timestamptz,
   waiting_room_opens_at::timestamptz, sale_ends_at::timestamptz,
-  'coming_soon', capacity, 'https://cdn.rusuh.id/events/' || event_id || '/hero.svg', event_code
+  'coming_soon', capacity, 'https://cdn.rusuh.id/events/' || event_id || '/hero.jpg', event_code
 FROM catalogue
 ON CONFLICT (event_id) DO UPDATE SET
   (name, subtitle, format, venue, venue_short, city, timezone, starts_at, doors_open_at, sale_opens_at,
@@ -78,7 +78,7 @@ ON CONFLICT (event_id, category_id) DO UPDATE SET
 
 -- Existing production event "Way Back Home": only the broken image link is fixed.
 UPDATE events
-SET image_url = 'https://cdn.rusuh.id/events/evt_2026_wbh/hero.svg', updated_at = NOW()
+SET image_url = 'https://cdn.rusuh.id/events/evt_2026_wbh/hero.jpg', updated_at = NOW()
 WHERE event_id = 'evt_2026_wbh';
 
 COMMIT;
