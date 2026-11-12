@@ -27,7 +27,8 @@ describe('createSqsMailer', () => {
       to: 'rina@example.com',
       code: '482019',
       locale: 'id',
-      expiresAt: new Date('2026-11-10T16:30:00Z')
+      expiresAt: new Date('2026-11-10T16:30:00Z'),
+      validFor: '10 menit'
     });
 
     expect(sendMock).toHaveBeenCalledTimes(1);
@@ -41,6 +42,7 @@ describe('createSqsMailer', () => {
         code: '482019',
         code_spaced: '482 019',
         expires_at: '23.30 WIB',
+        valid_for: '10 menit',
         email: 'rina@example.com'
       }
     });

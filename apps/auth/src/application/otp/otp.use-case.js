@@ -9,7 +9,8 @@ const {
   OTP_MAX_ATTEMPTS,
   hmacCode,
   generateCode,
-  normalizeEmail
+  normalizeEmail,
+  formatOtpValidity
 } = require('@/domain/otp');
 
 /**
@@ -61,7 +62,13 @@ function createOtpUseCase({ store, mailer, tokens, logger, otpSecret, otpTtlMs =
       await store.expireOtpChallengesForEmail(normalized, challenge.id);
 
       try {
-        await mailer.sendOtp({ to: normalized, code, locale: locale || 'id', expiresAt: challenge.expiresAt });
+        await mailer.sendOtp({
+          to: normalized,
+          code,
+          locale: locale || 'id',
+          expiresAt: challenge.expiresAt,
+          validFor: formatOtpValidity(otpTtlMs, locale || 'id')
+        });
       } catch (error) {
         // The code was never delivered: drop the challenge so a retry is
         // not rate-limited, and answer 503 retryable (LLD-01 §7).

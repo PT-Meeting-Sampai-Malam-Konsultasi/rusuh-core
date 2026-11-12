@@ -4,6 +4,7 @@ const otpVars = {
   code: '482019',
   code_spaced: '482&nbsp;019',
   expires_at: '21.30 WIB',
+  valid_for: '10 menit',
   email: 'rina@example.id'
 };
 

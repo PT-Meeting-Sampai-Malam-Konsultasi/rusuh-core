@@ -22,6 +22,7 @@ const otpVariablesSchema = Joi.object({
     .required(),
   code_spaced: Joi.string().required(),
   expires_at: Joi.string().required(),
+  valid_for: Joi.string().required(),
   email: Joi.string().email().required()
 }).unknown(false);
 

@@ -9,7 +9,13 @@ const otpJob = {
   type: 'EMAIL_OTP',
   to: 'user@example.id',
   request_id: 'req-1',
-  variables: { code: '123456', code_spaced: '123&nbsp;456', expires_at: '21.30 WIB', email: 'user@example.id' }
+  variables: {
+    code: '123456',
+    code_spaced: '123&nbsp;456',
+    expires_at: '21.30 WIB',
+    valid_for: '10 menit',
+    email: 'user@example.id'
+  }
 };
 
 const ticketJob = {

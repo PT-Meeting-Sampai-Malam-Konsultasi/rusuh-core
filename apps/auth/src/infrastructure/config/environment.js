@@ -16,9 +16,10 @@ const environmentSchema = Joi.object({
   AUTH_JWT_KID: Joi.string().optional(),
   AUTH_JWT_PUBLIC_KEYS_JWKS: Joi.string().optional(),
   OTP_SECRET: Joi.string().optional(),
-  // OTP code lifetime in ms. Default 10 min (current behaviour); the login
-  // design shows 5 min — set OTP_TTL_MS=300000 to match it.
-  OTP_TTL_MS: Joi.number().integer().positive().default(600000),
+  // OTP code lifetime in ms, clamped to the LLD-01 §7 decided range of
+  // 5–10 minutes. Default 10 min (current behaviour); the login design
+  // shows 5 min — set OTP_TTL_MS=300000 to match it.
+  OTP_TTL_MS: Joi.number().integer().min(300000).max(600000).default(600000),
   // Shared service credential for internal endpoints (core-module -> auth;
   // unset = the internal endpoints reject everything, fail-closed).
   SERVICE_KEY: Joi.string().allow('').optional(),

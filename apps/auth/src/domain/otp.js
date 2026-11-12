@@ -75,6 +75,21 @@ function formatOtpExpiry(expiresAt, locale) {
   return `${id} WIB`;
 }
 
+/**
+ * Formats an OTP lifetime for the e-mail copy (rusuh-web#46): id "10 menit",
+ * en "10 minutes". The templates render the value verbatim, so the unit word
+ * is part of the string (English pluralizes, Indonesian does not).
+ *
+ * @param {number} ttlMs - OTP lifetime in milliseconds.
+ * @param {string} locale - 'id' | 'en'.
+ * @returns {string} Validity phrase, e.g. "5 menit" / "5 minutes".
+ */
+function formatOtpValidity(ttlMs, locale) {
+  const minutes = Math.max(1, Math.round(ttlMs / 60000));
+  if (locale === 'en') return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+  return `${minutes} menit`;
+}
+
 module.exports = {
   OTP_TTL_MS,
   OTP_RESEND_COOLDOWN_MS,
@@ -86,5 +101,6 @@ module.exports = {
   generateCode,
   normalizeEmail,
   spaceOtpCode,
-  formatOtpExpiry
+  formatOtpExpiry,
+  formatOtpValidity
 };

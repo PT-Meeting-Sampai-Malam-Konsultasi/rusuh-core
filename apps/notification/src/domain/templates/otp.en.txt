@@ -4,7 +4,7 @@ Sign-in code: {{code}}
 
 Enter it on the Rusuh page you have open. New here? The same code creates your account.
 
-Valid for 10 minutes, until {{expires_at}}. Asking for a new code makes this one stop working.
+Valid for {{valid_for}}, until {{expires_at}}. Asking for a new code makes this one stop working.
 
 Don't share this code. Rusuh will never ask for it — not by phone, chat or e-mail.
 
