@@ -1,4 +1,5 @@
 const Joi = require('joi');
+const { parseCorsOrigins } = require('@rusuh/http');
 
 const environmentSchema = Joi.object({
   NODE_ENV: Joi.string().valid('development', 'test', 'staging', 'production').default('development'),
@@ -20,28 +21,6 @@ const environmentSchema = Joi.object({
   WORKER_ENABLED: Joi.boolean().truthy('true').falsy('false').default(true),
   CORS_ORIGINS: Joi.string().allow('').default('')
 }).unknown(true);
-
-const DEFAULT_CORS_ORIGINS = [
-  'https://rusuh-tiket.web.id',
-  'https://www.rusuh-tiket.web.id',
-  'http://localhost:3000',
-  'http://localhost:5173'
-];
-
-/**
- * Parses a comma-separated CORS origins string. An empty value means the
- * default origins (production domains + local dev frontends).
- *
- * @param {string} value - Raw CORS_ORIGINS value.
- * @returns {string[]} Origin list.
- */
-function parseCorsOrigins(value) {
-  const parsed = value
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-  return parsed.length > 0 ? parsed : DEFAULT_CORS_ORIGINS;
-}
 
 /**
  * Validates process environment and returns the service runtime configuration.

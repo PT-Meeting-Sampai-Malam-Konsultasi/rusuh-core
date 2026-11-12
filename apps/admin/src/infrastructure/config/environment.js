@@ -1,4 +1,5 @@
 const Joi = require('joi');
+const { parseCorsOrigins } = require('@rusuh/http');
 
 const environmentSchema = Joi.object({
   NODE_ENV: Joi.string().valid('development', 'test', 'staging', 'production').default('development'),
@@ -21,27 +22,6 @@ const environmentSchema = Joi.object({
   QUEUE_ADMIN_TOKEN: Joi.string().allow(null, ''),
   CORS_ORIGINS: Joi.string().allow(null, '').default('')
 }).unknown(true);
-
-/**
- * Parses a comma-separated CORS origins string into an array.
- *
- * @param {string} value - Comma-separated origins (may be empty/null).
- * @returns {Array<string>} Origins. Falls back to the default set
- * (production domains + local dev frontends) when unset/empty.
- */
-function parseCorsOrigins(value) {
-  const origins = (value || '')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-  if (origins.length > 0) return origins;
-  return [
-    'https://rusuh-tiket.web.id',
-    'https://www.rusuh-tiket.web.id',
-    'http://localhost:3000',
-    'http://localhost:5173'
-  ];
-}
 
 /**
  * Validates process environment and returns the service runtime configuration.

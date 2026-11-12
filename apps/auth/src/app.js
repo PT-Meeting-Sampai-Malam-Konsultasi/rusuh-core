@@ -2,7 +2,7 @@ require('./alias');
 
 const express = require('express');
 const cookieParser = require('cookie-parser');
-const cors = require('cors');
+const { createCors } = require('@rusuh/http');
 const helmet = require('helmet');
 const defaultPlatform = require('@/platform/common');
 const { createDuplicateKeyVerifier } = require('@/presentation/http/middleware/duplicate-json-keys');
@@ -32,7 +32,7 @@ function createApp({ config, platform = defaultPlatform, isReady, dependencies }
   // Security headers (helmet, defaults) + CORS, before any route is mounted.
   // CORS origins come from config (CORS_ORIGINS env, comma-separated).
   app.use(helmet());
-  app.use(cors({ origin: config.corsOrigins }));
+  app.use(createCors(config.corsOrigins));
   app.use(cookieParser());
   app.use(createResponseMiddleware({ platform }));
   app.use(

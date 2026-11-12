@@ -1,14 +1,5 @@
 const Joi = require('joi');
-
-// Default CORS origins (production web + local dev). Overridable via
-// CORS_ORIGINS (comma-separated). The API is JSON-only and never renders
-// HTML, so the origin list is the only CORS surface that matters.
-const DEFAULT_CORS_ORIGINS = [
-  'https://rusuh-tiket.web.id',
-  'https://www.rusuh-tiket.web.id',
-  'http://localhost:3000',
-  'http://localhost:5173'
-];
+const { parseCorsOrigins } = require('@rusuh/http');
 
 const environmentSchema = Joi.object({
   NODE_ENV: Joi.string().valid('development', 'test', 'staging', 'production').default('development'),
@@ -92,14 +83,7 @@ function loadEnvironment(environment = process.env) {
     bodyLimit: value.BODY_LIMIT,
     enableDuplicateJsonKeyValidation: value.ENABLE_DUPLICATE_JSON_KEY_VALIDATION,
     gracefulShutdownTimeoutMs: value.GRACEFUL_SHUTDOWN_TIMEOUT_MS,
-    // Comma-separated CORS_ORIGINS, parsed into an array (trimmed, empties
-    // dropped). Unset/empty = DEFAULT_CORS_ORIGINS.
-    corsOrigins:
-      value.CORS_ORIGINS && value.CORS_ORIGINS.trim()
-        ? value.CORS_ORIGINS.split(',')
-            .map((origin) => origin.trim())
-            .filter((origin) => origin.length > 0)
-        : DEFAULT_CORS_ORIGINS,
+    corsOrigins: parseCorsOrigins(value.CORS_ORIGINS),
     databaseUrl: value.DATABASE_URL || null,
     valkeyUrl: value.VALKEY_URL || null,
     dukcapilUrl: value.DUKCAPIL_URL,
@@ -131,4 +115,4 @@ function loadEnvironment(environment = process.env) {
   };
 }
 
-module.exports = { loadEnvironment, DEFAULT_CORS_ORIGINS };
+module.exports = { loadEnvironment };

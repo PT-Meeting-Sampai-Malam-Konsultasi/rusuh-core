@@ -4,7 +4,7 @@ require('module-alias').addAlias('@', __dirname);
 
 const express = require('express');
 const helmet = require('helmet');
-const cors = require('cors');
+const { createCors } = require('@rusuh/http');
 const defaultPlatform = require('@/platform/common');
 const { createDuplicateKeyVerifier } = require('@/presentation/http/middleware/duplicate-json-keys');
 const { createResponseMiddleware } = require('@/presentation/http/middleware/response');
@@ -31,7 +31,7 @@ function createApp({ config, platform = defaultPlatform, isReady, officerDeps } 
   // This is a JSON API (no HTML is rendered), so helmet's defaults are fine.
   // CORS origins come from config (CORS_ORIGINS, comma-separated).
   app.use(helmet());
-  app.use(cors({ origin: config.corsOrigins }));
+  app.use(createCors(config.corsOrigins));
   app.use(createResponseMiddleware({ platform }));
   app.use(
     express.json({

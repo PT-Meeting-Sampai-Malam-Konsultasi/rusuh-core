@@ -1,3 +1,4 @@
+const { DEFAULT_CORS_ORIGINS } = require('@rusuh/http');
 const { loadEnvironment } = require('../environment');
 
 describe('loadEnvironment', () => {
@@ -10,21 +11,11 @@ describe('loadEnvironment', () => {
   });
 
   it('defaults CORS origins to the production domains + local dev origins', () => {
-    expect(loadEnvironment({}).corsOrigins).toEqual([
-      'https://rusuh-tiket.web.id',
-      'https://www.rusuh-tiket.web.id',
-      'http://localhost:3000',
-      'http://localhost:5173'
-    ]);
+    expect(loadEnvironment({}).corsOrigins).toEqual(DEFAULT_CORS_ORIGINS);
   });
 
   it('defaults CORS origins when the value is empty', () => {
-    expect(loadEnvironment({ CORS_ORIGINS: '' }).corsOrigins).toEqual([
-      'https://rusuh-tiket.web.id',
-      'https://www.rusuh-tiket.web.id',
-      'http://localhost:3000',
-      'http://localhost:5173'
-    ]);
+    expect(loadEnvironment({ CORS_ORIGINS: '' }).corsOrigins).toEqual(DEFAULT_CORS_ORIGINS);
   });
 
   it('parses a comma-separated CORS_ORIGINS list (trims, drops empties)', () => {
