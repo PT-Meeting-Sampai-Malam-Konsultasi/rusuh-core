@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { Pool } = require('pg');
 
 /**
@@ -19,13 +20,25 @@ const { Pool } = require('pg');
 function createPostgresStore({ connectionString, pool } = {}) {
   const db = pool || new Pool({ connectionString, max: 5 });
 
+  /** Maps core-schema rows to the admin response shape. */
   const toEvent = (row, categories) => ({
-    id: row.id,
+    event_id: row.event_id,
     name: row.name,
+    subtitle: row.subtitle,
+    format: row.format,
     venue: row.venue,
-    date: row.date instanceof Date ? row.date.toISOString().slice(0, 10) : row.date,
+    venue_short: row.venue_short,
+    city: row.city,
+    timezone: row.timezone,
+    starts_at: row.starts_at,
     doors_open_at: row.doors_open_at,
-    status: row.status,
+    sale_opens_at: row.sale_opens_at,
+    waiting_room_opens_at: row.waiting_room_opens_at,
+    sale_ends_at: row.sale_ends_at,
+    state: row.state,
+    capacity: row.capacity,
+    image_url: row.image_url,
+    event_code: row.event_code,
     cap_tier: row.cap_tier,
     cap: row.cap,
     infra_cap: row.infra_cap,
@@ -34,70 +47,91 @@ function createPostgresStore({ connectionString, pool } = {}) {
     updated_at: row.updated_at
   });
 
+  /** Loads the core-schema categories for one event. */
+  async function findCategories(executor, eventId) {
+    const { rows } = await executor.query(
+      `SELECT category_id, event_id, name, description, seating, entry_gate AS gate,
+              price, total, category_code, almost_sold_out_threshold
+       FROM categories WHERE event_id = $1 ORDER BY price`,
+      [eventId]
+    );
+    return rows;
+  }
+
   return {
     async listEvents() {
-      const { rows } = await db.query('SELECT * FROM events ORDER BY created_at DESC');
-      return Promise.all(
-        rows.map(async (row) => {
-          const categories = await db.query(
-            'SELECT id, name, price, total, gate, almost_sold_out_threshold FROM categories WHERE event_id = $1',
-            [row.id]
-          );
-          return toEvent(row, categories.rows);
-        })
-      );
+      const { rows } = await db.query('SELECT * FROM events ORDER BY starts_at DESC');
+      return Promise.all(rows.map(async (row) => toEvent(row, await findCategories(db, row.event_id))));
     },
 
-    async getEvent(id) {
-      const { rows } = await db.query('SELECT * FROM events WHERE id = $1', [id]);
+    async getEvent(eventId) {
+      const { rows } = await db.query('SELECT * FROM events WHERE event_id = $1', [eventId]);
       if (rows.length === 0) return null;
-      const categories = await db.query(
-        'SELECT id, name, price, total, gate, almost_sold_out_threshold FROM categories WHERE event_id = $1',
-        [id]
-      );
-      return toEvent(rows[0], categories.rows);
+      return toEvent(rows[0], await findCategories(db, eventId));
     },
 
     async createEvent(data) {
       const client = await db.connect();
+      const eventId = data.event_id || `evt_${crypto.randomUUID().replace(/-/g, '')}`;
       try {
         await client.query('BEGIN');
         const { rows } = await client.query(
-          `INSERT INTO events (name, venue, date, doors_open_at, status, cap_tier, cap, infra_cap)
-           VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7) RETURNING *`,
+          `INSERT INTO events (
+             event_id, name, subtitle, format, venue, venue_short, city, timezone,
+             starts_at, doors_open_at, sale_opens_at, waiting_room_opens_at, sale_ends_at,
+             state, capacity, image_url, event_code, cap_tier, cap, infra_cap
+           ) VALUES (
+             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+           ) RETURNING *`,
           [
+            eventId,
             data.name,
+            data.subtitle || null,
+            data.format || null,
             data.venue,
-            data.date,
-            data.doors_open_at,
+            data.venue_short || null,
+            data.city || null,
+            data.timezone,
+            data.starts_at,
+            data.doors_open_at || null,
+            data.sale_opens_at || null,
+            data.waiting_room_opens_at || null,
+            data.sale_ends_at || null,
+            data.state,
+            data.capacity,
+            data.image_url || null,
+            data.event_code,
             data.cap_tier ?? null,
             data.cap ?? null,
             data.infra_cap ?? null
           ]
         );
-        const categories = [];
-        // Sequential inserts: they share one transaction client, so they
-        // must run in order (a parallel batch would break the transaction).
         /* eslint-disable no-await-in-loop */
-        for (let i = 0; i < (data.categories || []).length; i += 1) {
+        for (let i = 0; i < data.categories.length; i += 1) {
           const category = data.categories[i];
-          const inserted = await client.query(
-            `INSERT INTO categories (event_id, name, price, total, gate, almost_sold_out_threshold)
-             VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, price, total, gate, almost_sold_out_threshold`,
+          const categoryId = category.category_id || `cat_${crypto.randomUUID().replace(/-/g, '')}`;
+          await client.query(
+            `INSERT INTO categories (
+               category_id, event_id, name, description, seating, entry_gate, price, total, category_code,
+               almost_sold_out_threshold
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
             [
-              rows[0].id,
+              categoryId,
+              eventId,
               category.name,
+              category.description || null,
+              category.seating,
+              category.gate || null,
               category.price,
               category.total,
-              category.gate || null,
+              category.category_code,
               category.almost_sold_out_threshold ?? null
             ]
           );
-          categories.push(inserted.rows[0]);
         }
         /* eslint-enable no-await-in-loop */
         await client.query('COMMIT');
-        return toEvent(rows[0], categories);
+        return toEvent(rows[0], await findCategories(db, eventId));
       } catch (error) {
         await client.query('ROLLBACK');
         throw error;
@@ -106,27 +140,44 @@ function createPostgresStore({ connectionString, pool } = {}) {
       }
     },
 
-    async updateEvent(id, patch) {
+    async updateEvent(eventId, patch) {
+      const eventColumns = {
+        name: 'name',
+        subtitle: 'subtitle',
+        format: 'format',
+        venue: 'venue',
+        venue_short: 'venue_short',
+        city: 'city',
+        timezone: 'timezone',
+        starts_at: 'starts_at',
+        doors_open_at: 'doors_open_at',
+        sale_opens_at: 'sale_opens_at',
+        waiting_room_opens_at: 'waiting_room_opens_at',
+        sale_ends_at: 'sale_ends_at',
+        state: 'state',
+        capacity: 'capacity',
+        image_url: 'image_url',
+        event_code: 'event_code',
+        cap_tier: 'cap_tier',
+        cap: 'cap',
+        infra_cap: 'infra_cap'
+      };
       const sets = [];
       const values = [];
       Object.entries(patch).forEach(([key, value]) => {
-        if (['name', 'venue', 'date', 'doors_open_at', 'status', 'cap_tier', 'cap', 'infra_cap'].includes(key)) {
-          values.push(value);
-          sets.push(`${key} = $${values.length}`);
+        if (eventColumns[key]) {
+          values.push(value || null);
+          sets.push(`${eventColumns[key]} = $${values.length}`);
         }
       });
-      if (sets.length === 0) return this.getEvent(id);
-      values.push(id);
+      if (sets.length === 0) return this.getEvent(eventId);
+      values.push(eventId);
       const { rows } = await db.query(
-        `UPDATE events SET ${sets.join(', ')}, updated_at = now() WHERE id = $${values.length} RETURNING *`,
+        `UPDATE events SET ${sets.join(', ')}, updated_at = now() WHERE event_id = $${values.length} RETURNING *`,
         values
       );
       if (rows.length === 0) return null;
-      const categories = await db.query(
-        'SELECT id, name, price, total, gate, almost_sold_out_threshold FROM categories WHERE event_id = $1',
-        [id]
-      );
-      return toEvent(rows[0], categories.rows);
+      return toEvent(rows[0], await findCategories(db, eventId));
     },
 
     async getEventStats(eventId) {

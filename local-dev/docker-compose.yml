@@ -24,9 +24,17 @@ services:
       - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # Runs ONCE on first init (empty volume). All files use
-      # CREATE TABLE IF NOT EXISTS, so re-running is safe.
-      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+      # Runs ONCE on first init (empty volume), in filename order. Each script
+      # is its own file mount: Docker cannot create a mount point inside a
+      # directory that is itself mounted read-only, so do not mount the folder.
+      # Auth and core schemas come straight from their source files (one copy
+      # to maintain); only payment keeps a local script.
+      - ../apps/auth/db/migrations/001_auth.sql:/docker-entrypoint-initdb.d/01-auth.sql:ro
+      - ../apps/auth/db/migrations/002_otp_challenge_no_full_name.sql:/docker-entrypoint-initdb.d/02-auth-otp-no-full-name.sql:ro
+      - ../apps/auth/db/migrations/003_account_roles.sql:/docker-entrypoint-initdb.d/03-auth-account-roles.sql:ro
+      - ../apps/core/src/infrastructure/persistence/schema.sql:/docker-entrypoint-initdb.d/04-core.sql:ro
+      - ../apps/core/db/migrations/001_admin_schema_alignment.sql:/docker-entrypoint-initdb.d/05-core-admin-alignment.sql:ro
+      - ./postgres-init/06-payment.sql:/docker-entrypoint-initdb.d/06-payment.sql:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U rusuh -d rusuh']
       interval: 5s

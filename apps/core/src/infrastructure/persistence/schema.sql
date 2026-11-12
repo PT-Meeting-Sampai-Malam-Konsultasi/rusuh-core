@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS events (
   event_code TEXT NOT NULL,
   cap_tier INTEGER,
   cap INTEGER,
+  infra_cap INTEGER,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -38,6 +39,7 @@ CREATE TABLE IF NOT EXISTS categories (
   price INTEGER NOT NULL,
   total INTEGER NOT NULL,
   category_code TEXT NOT NULL,
+  almost_sold_out_threshold INTEGER,
   PRIMARY KEY (event_id, category_id)
 );
 

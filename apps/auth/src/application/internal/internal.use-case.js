@@ -19,7 +19,7 @@ function createInternalUseCase({ store }) {
      *
      * @param {object} input
      * @param {string} input.accountId - Account id (token sub).
-     * @returns {Promise<{id: string, email: string, locale: string, fullName: string|null}>}
+     * @returns {Promise<{id: string, email: string, role: string, locale: string, fullName: string|null}>}
      * @throws {Error} NOT_FOUND when the account does not exist.
      */
     async getAccount({ accountId }) {
@@ -31,6 +31,7 @@ function createInternalUseCase({ store }) {
       return {
         id: account.id,
         email: account.email,
+        role: account.role || 'user',
         locale: profile.locale || account.locale || 'id',
         fullName: profile.name ?? account.fullName ?? null
       };

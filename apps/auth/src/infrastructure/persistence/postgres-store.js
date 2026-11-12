@@ -14,6 +14,7 @@ function createPostgresStore({ databaseUrl }) {
     id: row.id,
     email: row.email,
     profileComplete: row.profile_complete,
+    role: row.role || 'user',
     createdAt: row.created_at,
     updatedAt: row.updated_at
   });

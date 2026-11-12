@@ -3,6 +3,8 @@
     "@": "src"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1165.0",
+    "@aws-sdk/s3-presigned-post": "^3.1165.0",
     "@hapi/boom": "^10.0.1",
     "@rusuh/auth": "0.1.0",
     "@rusuh/contracts": "0.1.0",
@@ -10,6 +12,7 @@
     "dotenv": "^16.4.7",
     "express": "^5.1.0",
     "helmet": "^8.3.0",
+    "ioredis": "^6.0.0",
     "joi": "^17.13.3",
     "module-alias": "^2.2.3",
     "pg": "^8.23.1"

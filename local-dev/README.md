@@ -72,10 +72,12 @@ cd apps/admin && npm start        # 8086
 
 ## Notes and limits
 
-- Postgres init scripts (`postgres-init/`) run **once**, on first start
-  (empty volume). They are the modules' own schemas
-  (`CREATE TABLE IF NOT EXISTS`): auth `001_auth.sql`, core `schema.sql`,
-  payment `schema.sql`. To re-apply after a schema change, run them by hand:
+- Postgres init scripts run **once**, on first start (empty volume), in
+  filename order. They are mounted from the modules' own sources
+  (`CREATE TABLE IF NOT EXISTS`): auth `db/migrations/001-003`, core
+  `schema.sql` + `db/migrations/001`; only payment keeps a local copy
+  (`postgres-init/06-payment.sql`). To re-apply after a schema change on an
+  existing volume, run the file by hand:
   `psql "postgres://rusuh:rusuh-dev@localhost:5432/rusuh" -f <file>`.
 - `setup-env.sh` never overwrites an existing `apps/*/.env` (use `--force`).
   It generates fresh keys every run with `--force`, which invalidates

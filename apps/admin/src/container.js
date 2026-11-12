@@ -3,6 +3,9 @@ const { createHealthController } = require('@/presentation/http/controllers/heal
 const { createHealthRouter } = require('@/presentation/http/routes/health.route');
 const { createStore } = require('@/infrastructure/persistence/store');
 const { createVerifier } = require('@/infrastructure/auth');
+const { createAuthAccountsClient } = require('@/infrastructure/external/auth-accounts');
+const { createImageUploads } = require('@/infrastructure/storage/image-uploads');
+const { createStockSeeder } = require('@/infrastructure/stock/valkey-stock');
 const { createQueueClient } = require('@/infrastructure/external/queue-admin');
 const { createRequireAdmin } = require('@/presentation/http/middleware/require-admin');
 const { createAuditUseCase } = require('@/application/audit/audit.use-case');
@@ -38,11 +41,14 @@ const { createQueueRouter } = require('@/presentation/http/routes/queue.route');
  * @param {Function} [options.isReady] - Optional readiness predicate.
  * @param {object} [options.store] - Admin store (injected in tests).
  * @param {object} [options.auth] - Token verifier (injected in tests).
+ * @param {object} [options.accounts] - Auth account client (injected in tests).
+ * @param {object} [options.stockSeeder] - Valkey stock seeder (injected in tests).
+ * @param {object} [options.imageUploads] - Image upload presigner (injected in tests).
  * @param {object} [options.queueClient] - Queue admin API client (injected in tests).
  * @param {object} [options.config] - Runtime configuration (store/auth defaults).
  * @returns {object} Mounted service modules.
  */
-function mountRoutes(app, { isReady, store, auth, queueClient, config } = {}) {
+function mountRoutes(app, { isReady, store, auth, accounts, queueClient, stockSeeder, imageUploads, config } = {}) {
   const healthUseCase = createHealthUseCase({ isReady });
   const healthController = createHealthController(healthUseCase);
   app.use(createHealthRouter(healthController));
@@ -56,16 +62,31 @@ function mountRoutes(app, { isReady, store, auth, queueClient, config } = {}) {
       expectedAud: config && config.authAudience,
       expectedIss: config && config.authIssuer
     });
+  const activeAccounts =
+    accounts ||
+    createAuthAccountsClient({ baseUrl: config && config.authUrl, serviceKey: config && config.serviceKey });
   const activeQueueClient =
     queueClient ||
     createQueueClient({
       baseUrl: config && config.queueAdminUrl,
       operatorToken: config && config.queueAdminToken
     });
-  const requireAdmin = createRequireAdmin({ auth: activeAuth, store: activeStore });
+  const requireAdmin = createRequireAdmin({ auth: activeAuth, accounts: activeAccounts });
   const audit = createAuditUseCase(activeStore);
 
-  const eventUseCase = createEventUseCase(activeStore, audit);
+  const activeStockSeeder = stockSeeder || createStockSeeder({ url: config && config.valkeyUrl });
+  const activeImageUploads =
+    imageUploads ||
+    createImageUploads({
+      bucket: config && config.assetsBucket,
+      assetBaseUrl: config && config.assetBaseUrl,
+      region: config && config.awsRegion
+    });
+  const eventUseCase = createEventUseCase(activeStore, audit, {
+    stockSeeder: activeStockSeeder,
+    imageUploads: activeImageUploads,
+    assetBaseUrl: config && config.assetBaseUrl
+  });
   const feesUseCase = createFeesUseCase(activeStore, audit);
   const bookingsUseCase = createBookingsUseCase(activeStore, audit);
   const usersUseCase = createUsersUseCase(activeStore);

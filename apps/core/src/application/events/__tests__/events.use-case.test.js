@@ -41,6 +41,16 @@ describe('events use case (catalogue)', () => {
     await expect(useCase.getEvent('evt_missing')).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
+  it('hides draft events from list, detail and categories (admin-only state)', async () => {
+    const { store, useCase } = buildUseCase();
+    store.events.get('evt_2026_gbk').state = 'draft';
+    const admission = { expiresAt: new Date(Date.now() + 16 * 60 * 1000).toISOString(), maxTickets: 2 };
+    expect((await useCase.listEvents()).items).toHaveLength(0);
+    expect((await useCase.listEvents({ state: ['draft'] })).items).toHaveLength(0);
+    await expect(useCase.getEvent('evt_2026_gbk')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(useCase.getCategories('evt_2026_gbk', admission)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
   it('getEvent returns a null priceFrom when the event has no categories', async () => {
     const { store, useCase } = buildUseCase();
     store.categories.clear();

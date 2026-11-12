@@ -27,9 +27,23 @@ describe('GET /v1/internal/accounts/:accountId (service key)', () => {
     expect(response.body).toEqual({
       id: session.user.userId,
       email: 'buyer@example.com',
+      role: 'user',
       locale: 'en',
       fullName: 'Rina Pembeli'
     });
+  });
+
+  it('exposes the authorization role stored on the account (admin guard source)', async () => {
+    const session = await loginViaOtp(app, dependencies.mailer, 'boss@example.com');
+    const account = await dependencies.store.findAccountById(session.user.userId);
+    // The memory store has no role-management API on purpose: promotion is a DB action.
+    Object.assign(account, { role: 'admin' });
+    jest.spyOn(dependencies.store, 'findAccountById').mockResolvedValueOnce(account);
+    const response = await request(app)
+      .get(`/v1/internal/accounts/${session.user.userId}`)
+      .set('x-service-key', 'test-internal-key');
+    expect(response.status).toBe(200);
+    expect(response.body.role).toBe('admin');
   });
 
   it('rejects a missing or wrong service key (fail-closed)', async () => {
