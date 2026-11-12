@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 765" role="img" aria-label="Kelana">
+  <title>Kelana</title>
+  <defs>
+    <linearGradient id="egg" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#D81F72"/>
+      <stop offset="1" stop-color="#D81F72" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="765" fill="#777777"/>
+  <path d="M 300 150 C 385 150 465 268 465 395 C 465 512 392 590 300 590 C 208 590 135 512 135 395 C 135 268 215 150 300 150 Z" fill="url(#egg)"/>
+</svg>
