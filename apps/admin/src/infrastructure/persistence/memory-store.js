@@ -24,27 +24,35 @@ function createMemoryStore(seed = {}) {
   };
 
   const seedEvent = (overrides = {}) => {
-    const id = overrides.id || `evt_${crypto.randomUUID().slice(0, 8)}`;
+    const id = overrides.event_id || `evt_${crypto.randomUUID().slice(0, 8)}`;
     const event = {
-      id,
+      event_id: id,
       name: 'Samudra',
       venue: 'GBK',
-      date: '2026-11-14',
-      doors_open_at: '2026-11-14T16:00:00+07:00',
-      status: 'on_sale',
+      starts_at: '2026-11-14T12:00:00Z',
+      doors_open_at: '2026-11-14T09:00:00Z',
+      state: 'on_sale',
+      capacity: 2200,
       cap_tier: 3,
       cap: 2000,
       infra_cap: 1500,
       categories: [
         {
-          id: 'cat_festival',
+          category_id: 'cat_festival',
           name: 'Festival',
           price: 500000,
           total: 2000,
           gate: 'Gerbang 5',
           almost_sold_out_threshold: 100
         },
-        { id: 'cat_vip', name: 'VIP', price: 1500000, total: 200, gate: 'Gerbang 1', almost_sold_out_threshold: 20 }
+        {
+          category_id: 'cat_vip',
+          name: 'VIP',
+          price: 1500000,
+          total: 200,
+          gate: 'Gerbang 1',
+          almost_sold_out_threshold: 20
+        }
       ],
       created_at: now,
       updated_at: now,
@@ -81,16 +89,23 @@ function createMemoryStore(seed = {}) {
     return booking;
   };
 
-  seedEvent({ id: 'evt_2026_gbk', name: 'Samudra', venue: 'GBK' });
+  seedEvent({ event_id: 'evt_2026_gbk', name: 'Samudra', venue: 'GBK' });
   seedEvent({
-    id: 'evt_2026_draft',
+    event_id: 'evt_2026_draft',
     name: 'Draft Event',
     venue: 'GBK',
-    status: 'draft',
+    state: 'draft',
     cap: 100,
     infra_cap: 100,
     categories: [
-      { id: 'cat_draft', name: 'General', price: 100000, total: 100, gate: 'Gerbang 1', almost_sold_out_threshold: 10 }
+      {
+        category_id: 'cat_draft',
+        name: 'General',
+        price: 100000,
+        total: 100,
+        gate: 'Gerbang 1',
+        almost_sold_out_threshold: 10
+      }
     ]
   });
   seedBooking({
@@ -177,23 +192,38 @@ function createMemoryStore(seed = {}) {
     },
 
     async createEvent(data) {
-      const id = data.id || `evt_${crypto.randomUUID().slice(0, 8)}`;
+      const id = data.event_id || `evt_${crypto.randomUUID().replace(/-/g, '')}`;
       const event = {
-        id,
+        event_id: id,
         name: data.name,
+        subtitle: data.subtitle || null,
+        format: data.format || null,
         venue: data.venue,
-        date: data.date,
-        doors_open_at: data.doors_open_at,
-        status: 'draft',
+        venue_short: data.venue_short || null,
+        city: data.city || null,
+        timezone: data.timezone || 'Asia/Jakarta',
+        starts_at: data.starts_at,
+        doors_open_at: data.doors_open_at || null,
+        sale_opens_at: data.sale_opens_at || null,
+        waiting_room_opens_at: data.waiting_room_opens_at || null,
+        sale_ends_at: data.sale_ends_at || null,
+        state: data.state || 'draft',
+        capacity: data.capacity,
+        image_url: data.image_url || null,
+        event_code: data.event_code,
         cap_tier: data.cap_tier ?? null,
         cap: data.cap ?? null,
         infra_cap: data.infra_cap ?? null,
         categories: (data.categories || []).map((category) => ({
-          id: category.id || `cat_${crypto.randomUUID().slice(0, 8)}`,
+          category_id: category.category_id || `cat_${crypto.randomUUID().replace(/-/g, '')}`,
+          event_id: id,
           name: category.name,
+          description: category.description || null,
+          seating: category.seating || 'standing',
           price: category.price,
           total: category.total,
           gate: category.gate || null,
+          category_code: category.category_code,
           almost_sold_out_threshold: category.almost_sold_out_threshold ?? null
         })),
         created_at: now,

@@ -34,6 +34,7 @@ function createMemoryStore() {
         id: `acc_${crypto.randomUUID()}`,
         email,
         profileComplete: false,
+        role: 'user',
         createdAt: now(),
         updatedAt: now()
       };

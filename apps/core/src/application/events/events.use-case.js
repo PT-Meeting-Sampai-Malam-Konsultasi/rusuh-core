@@ -14,7 +14,7 @@ const { presentEvent, presentCategory, serverNow } = require('@/domain/presenter
 function createEventsUseCase({ store, stock, fees }) {
   return {
     async listEvents({ state } = {}) {
-      const events = await store.listEvents();
+      const events = (await store.listEvents()).filter((e) => e.state !== 'draft');
       const filtered = state && state.length > 0 ? events.filter((e) => state.includes(e.state)) : events;
       const items = await Promise.all(
         filtered.map(async (event) => {
@@ -31,7 +31,8 @@ function createEventsUseCase({ store, stock, fees }) {
 
     async getEvent(eventId) {
       const event = await store.getEvent(eventId);
-      if (!event) throw problemError('NOT_FOUND', 'No such resource for this caller.');
+      // Drafts are admin-only (ADR draft state): indistinguishable from a missing event.
+      if (!event || event.state === 'draft') throw problemError('NOT_FOUND', 'No such resource for this caller.');
       const categories = await store.getCategories(eventId);
       const cheapest = categories.reduce((min, c) => (min === null || c.price < min ? c.price : min), null);
       return presentEvent({ ...event, priceFrom: cheapest === null ? null : { amount: cheapest, currency: 'IDR' } });
@@ -44,7 +45,7 @@ function createEventsUseCase({ store, stock, fees }) {
      */
     async getCategories(eventId, admission) {
       const event = await store.getEvent(eventId);
-      if (!event) throw problemError('NOT_FOUND', 'No such resource for this caller.');
+      if (!event || event.state === 'draft') throw problemError('NOT_FOUND', 'No such resource for this caller.');
       const categories = await store.getCategories(eventId);
       const presented = await Promise.all(
         categories.map(async (category) => {

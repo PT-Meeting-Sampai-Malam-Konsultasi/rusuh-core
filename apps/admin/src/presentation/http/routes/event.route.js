@@ -15,6 +15,7 @@ function createEventRouter(controller) {
   router.post('/events', c.createEvent);
   router.get('/events/:eventId', c.getEvent);
   router.put('/events/:eventId', c.updateEvent);
+  router.post('/events/:eventId/image-upload', c.createImageUpload);
   router.get('/events/:eventId/cap', c.getCap);
   router.put('/events/:eventId/cap', c.updateCap);
   router.get('/events/:eventId/stats', c.getStats);

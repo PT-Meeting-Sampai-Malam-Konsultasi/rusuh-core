@@ -19,10 +19,23 @@ const { mountRoutes } = require('@/container');
  * @param {Function} [options.isReady] - Optional readiness predicate.
  * @param {object} [options.store] - Admin store (defaults to the configured store).
  * @param {object} [options.auth] - Token verifier { verify(token) }.
+ * @param {object} [options.accounts] - Auth account client for role lookup.
  * @param {object} [options.queueClient] - Queue admin API client.
+ * @param {object} [options.stockSeeder] - Valkey stock seeder.
+ * @param {object} [options.imageUploads] - Image upload presigner.
  * @returns {import('express').Express} Configured Express application.
  */
-function createApp({ config, platform = defaultPlatform, isReady, store, auth, queueClient } = {}) {
+function createApp({
+  config,
+  platform = defaultPlatform,
+  isReady,
+  store,
+  auth,
+  accounts,
+  queueClient,
+  stockSeeder,
+  imageUploads
+} = {}) {
   if (!config) throw new Error('createApp requires validated configuration');
 
   const app = express();
@@ -41,7 +54,7 @@ function createApp({ config, platform = defaultPlatform, isReady, store, auth, q
   );
   app.use(express.urlencoded({ extended: true, limit: config.bodyLimit }));
 
-  mountRoutes(app, { platform, isReady, store, auth, queueClient, config });
+  mountRoutes(app, { platform, isReady, store, auth, accounts, queueClient, stockSeeder, imageUploads, config });
   app.use(notFound);
   app.use(createProblemHandler({ platform }));
 

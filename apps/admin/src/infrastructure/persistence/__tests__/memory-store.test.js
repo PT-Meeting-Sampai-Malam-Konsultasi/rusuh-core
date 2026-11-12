@@ -52,15 +52,17 @@ describe('createMemoryStore', () => {
     const event = await store.createEvent({
       name: 'Minimal',
       venue: 'GBK',
-      date: '2026-12-01',
-      doors_open_at: '2026-12-01T16:00:00+07:00',
-      categories: [{ name: 'General', price: 100000, total: 50 }]
+      starts_at: '2026-12-01T12:00:00Z',
+      doors_open_at: '2026-12-01T09:00:00Z',
+      capacity: 50,
+      event_code: 'MIN',
+      categories: [{ name: 'General', price: 100000, total: 50, category_code: 'GEN' }]
     });
-    expect(event.id).toMatch(/^evt_/);
-    expect(event.status).toBe('draft');
+    expect(event.event_id).toMatch(/^evt_/);
+    expect(event.state).toBe('draft');
     expect(event.cap).toBeNull();
     expect(event.infra_cap).toBeNull();
-    expect(event.categories[0].id).toMatch(/^cat_/);
+    expect(event.categories[0].category_id).toMatch(/^cat_/);
     expect(event.categories[0].gate).toBeNull();
     expect(event.categories[0].almost_sold_out_threshold).toBeNull();
   });
@@ -68,20 +70,32 @@ describe('createMemoryStore', () => {
   it('creates an event keeping provided ids, cap and thresholds', async () => {
     const store = createMemoryStore();
     const event = await store.createEvent({
-      id: 'evt_custom',
+      event_id: 'evt_custom',
       name: 'Full',
       venue: 'GBK',
-      date: '2026-12-01',
-      doors_open_at: '2026-12-01T16:00:00+07:00',
+      starts_at: '2026-12-01T12:00:00Z',
+      doors_open_at: '2026-12-01T09:00:00Z',
+      capacity: 100,
+      event_code: 'FUL',
       cap_tier: 1,
       cap: 100,
       infra_cap: 80,
-      categories: [{ id: 'cat_a', name: 'A', price: 100000, total: 100, gate: 'G1', almost_sold_out_threshold: 5 }]
+      categories: [
+        {
+          category_id: 'cat_a',
+          name: 'A',
+          price: 100000,
+          total: 100,
+          gate: 'G1',
+          category_code: 'AAA',
+          almost_sold_out_threshold: 5
+        }
+      ]
     });
-    expect(event.id).toBe('evt_custom');
+    expect(event.event_id).toBe('evt_custom');
     expect(event.cap).toBe(100);
     expect(event.infra_cap).toBe(80);
-    expect(event.categories[0].id).toBe('cat_a');
+    expect(event.categories[0].category_id).toBe('cat_a');
     expect(event.categories[0].gate).toBe('G1');
     expect(event.categories[0].almost_sold_out_threshold).toBe(5);
   });

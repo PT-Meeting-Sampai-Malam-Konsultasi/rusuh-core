@@ -1,5 +1,10 @@
 const { ApiError } = require('@/domain/errors');
-const { createEventSchema, updateEventSchema, capSchema } = require('../validation/event.validation');
+const {
+  createEventSchema,
+  updateEventSchema,
+  imageUploadSchema,
+  capSchema
+} = require('../validation/event.validation');
 
 /**
  * Validates a Joi schema against the request body (or query).
@@ -47,6 +52,13 @@ function createEventController(eventUseCase) {
       const body = validate(updateEventSchema, request.body);
       const event = await eventUseCase.updateEvent(request.params.eventId, body, request.admin);
       response.status(200).json(event);
+    },
+
+    createImageUpload: async (request, response) => {
+      response.locals.skipResponseEnvelope = true;
+      const body = validate(imageUploadSchema, request.body);
+      const upload = await eventUseCase.createImageUpload(request.params.eventId, body.content_type, request.admin);
+      response.status(201).json(upload);
     },
 
     getCap: async (request, response) => {

@@ -11,9 +11,12 @@ const { createMemoryStore } = require('@/infrastructure/persistence/memory-store
  * @param {object} [options] - Overrides.
  * @param {object} [options.store] - Store to use.
  * @param {object} [options.queueClient] - Queue client to use.
+ * @param {object} [options.stockSeeder] - Stock seeder double.
+ * @param {object} [options.imageUploads] - Image upload double.
+ * @param {object} [options.config] - Config override.
  * @returns {object} { app, store }.
  */
-function createTestApp({ store, queueClient } = {}) {
+function createTestApp({ store, queueClient, stockSeeder, imageUploads, config } = {}) {
   const activeStore = store || createMemoryStore();
   const auth = {
     verify: async (token) => {
@@ -30,7 +33,20 @@ function createTestApp({ store, queueClient } = {}) {
       return accounts[token];
     }
   };
-  const app = createApp({ config: loadEnvironment({}), store: activeStore, auth, queueClient });
+  const accounts = {
+    async getAccount(accountId) {
+      return activeStore.getUserById(accountId);
+    }
+  };
+  const app = createApp({
+    config: config || loadEnvironment({}),
+    store: activeStore,
+    auth,
+    accounts,
+    queueClient,
+    stockSeeder,
+    imageUploads
+  });
   return { app, store: activeStore };
 }
 
