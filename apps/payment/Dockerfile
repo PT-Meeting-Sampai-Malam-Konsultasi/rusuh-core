@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 # Build context is the repository root (npm workspaces monorepo).
-FROM node:20.16.0-bookworm-slim AS dependencies
+FROM node:24.22.3-bookworm-slim AS dependencies
 WORKDIR /usr/src/app
 COPY package.json package-lock.json ./
 COPY packages/ ./packages/
@@ -12,7 +12,7 @@ COPY apps/officer/package.json ./apps/officer/package.json
 COPY apps/admin/package.json ./apps/admin/package.json
 RUN npm ci --omit=dev --ignore-scripts
 
-FROM gcr.io/distroless/nodejs20-debian12:nonroot
+FROM gcr.io/distroless/nodejs24-debian13:nonroot
 WORKDIR /usr/src/app
 ENV NODE_ENV=production
 COPY --from=dependencies --chown=nonroot:nonroot /usr/src/app/node_modules ./node_modules
