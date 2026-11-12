@@ -40,6 +40,19 @@ function createPostgresStore({ databaseUrl }) {
     createdAt: row.created_at
   });
 
+  const mapEmailChange = (row) => ({
+    id: row.id,
+    accountId: row.account_id,
+    newEmail: row.new_email,
+    oldCodeHash: row.old_code_hash,
+    newCodeHash: row.new_code_hash,
+    locale: row.locale,
+    expiresAt: row.expires_at,
+    attempts: row.attempts,
+    usedAt: row.used_at,
+    createdAt: row.created_at
+  });
+
   const mapRefresh = (row) => ({
     id: row.id,
     accountId: row.account_id,
@@ -148,6 +161,82 @@ function createPostgresStore({ databaseUrl }) {
 
     async deleteOtpChallenge(id) {
       await pool.query('DELETE FROM otp_codes WHERE id = $1', [id]);
+    },
+
+    async updateAccountEmail(accountId, email) {
+      try {
+        const { rows } = await pool.query(
+          'UPDATE accounts SET email = $2, updated_at = now() WHERE id = $1 RETURNING *',
+          [accountId, email]
+        );
+        return rows[0] ? mapAccount(rows[0]) : null;
+      } catch (error) {
+        if (error.code === '23505') {
+          const taken = new Error('Email already in use');
+          taken.code = 'EMAIL_TAKEN';
+          throw taken;
+        }
+        throw error;
+      }
+    },
+
+    async createEmailChange({ accountId, newEmail, oldCodeHash, newCodeHash, locale, expiresAt }) {
+      const { rows } = await pool.query(
+        `INSERT INTO email_change_challenges (account_id, new_email, old_code_hash, new_code_hash, locale, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [accountId, newEmail, oldCodeHash, newCodeHash, locale || 'id', expiresAt]
+      );
+      return mapEmailChange(rows[0]);
+    },
+
+    async findEmailChangeById(id) {
+      const { rows } = await pool.query('SELECT * FROM email_change_challenges WHERE id = $1', [id]);
+      return rows[0] ? mapEmailChange(rows[0]) : null;
+    },
+
+    async findLatestEmailChangeByAccount(accountId) {
+      const { rows } = await pool.query(
+        'SELECT * FROM email_change_challenges WHERE account_id = $1 ORDER BY created_at DESC LIMIT 1',
+        [accountId]
+      );
+      return rows[0] ? mapEmailChange(rows[0]) : null;
+    },
+
+    async countEmailChangesSince(accountId, since) {
+      const { rows } = await pool.query(
+        'SELECT COUNT(*)::int AS count FROM email_change_challenges WHERE account_id = $1 AND created_at >= $2',
+        [accountId, since]
+      );
+      return rows[0].count;
+    },
+
+    async expireEmailChangesForAccount(accountId, exceptId) {
+      await pool.query(
+        `UPDATE email_change_challenges SET expires_at = now()
+         WHERE account_id = $1 AND id <> $2 AND used_at IS NULL AND expires_at > now()`,
+        [accountId, exceptId]
+      );
+    },
+
+    async updateEmailChange(id, patch) {
+      const sets = [];
+      const values = [id];
+      const columns = { attempts: 'attempts', usedAt: 'used_at', expiresAt: 'expires_at' };
+      Object.entries(patch).forEach(([key, value]) => {
+        if (!columns[key]) return;
+        values.push(value);
+        sets.push(`${columns[key]} = $${values.length}`);
+      });
+      if (sets.length === 0) return this.findEmailChangeById(id);
+      const { rows } = await pool.query(
+        `UPDATE email_change_challenges SET ${sets.join(', ')} WHERE id = $1 RETURNING *`,
+        values
+      );
+      return rows[0] ? mapEmailChange(rows[0]) : null;
+    },
+
+    async deleteEmailChange(id) {
+      await pool.query('DELETE FROM email_change_challenges WHERE id = $1', [id]);
     },
 
     async createRefreshToken({ accountId, familyId, tokenHash, expiresAt, deviceLabel, currentAccessJti }) {

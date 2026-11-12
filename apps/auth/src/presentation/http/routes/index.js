@@ -10,6 +10,8 @@ const { createSessionRouter } = require('@/presentation/http/routes/session.rout
 const { createProfileUseCase } = require('@/application/profile/profile.use-case');
 const { createProfileController } = require('@/presentation/http/controllers/profile.controller');
 const { createProfileRouter } = require('@/presentation/http/routes/profile.route');
+const { createEmailChangeUseCase } = require('@/application/profile/email-change.use-case');
+const { createEmailChangeController } = require('@/presentation/http/controllers/email-change.controller');
 const { requireAccountToken } = require('@/presentation/http/middleware/auth');
 const { requireServiceKey } = require('@/presentation/http/middleware/service-key');
 const { createInternalUseCase } = require('@/application/internal/internal.use-case');
@@ -45,6 +47,9 @@ function mountRoutes(app, { isReady, dependencies, config } = {}) {
   const profileUseCase = createProfileUseCase({ store, logger });
   const profileController = createProfileController(profileUseCase);
 
+  const emailChangeUseCase = createEmailChangeUseCase({ store, mailer, logger, otpSecret, otpTtlMs });
+  const emailChangeController = createEmailChangeController(emailChangeUseCase);
+
   const requireToken = requireAccountToken({ tokens, denylist });
 
   const internalUseCase = createInternalUseCase({ store });
@@ -54,7 +59,7 @@ function mountRoutes(app, { isReady, dependencies, config } = {}) {
   app.use(createHealthRouter(healthController));
   app.use('/v1/auth', createOtpRouter(otpController));
   app.use('/v1/auth', createSessionRouter(sessionController, requireToken));
-  app.use('/v1', createProfileRouter(profileController, requireToken));
+  app.use('/v1', createProfileRouter(profileController, requireToken, emailChangeController));
   app.use('/v1', createInternalRouter(internalController, requireSvcKey));
 
   return {
@@ -62,6 +67,7 @@ function mountRoutes(app, { isReady, dependencies, config } = {}) {
     otpUseCase,
     sessionUseCase,
     profileUseCase,
+    emailChangeUseCase,
     internalUseCase,
     dependencies: deps
   };
