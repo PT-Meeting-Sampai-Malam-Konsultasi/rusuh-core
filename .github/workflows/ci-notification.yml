@@ -1,0 +1,53 @@
+name: notification ci
+
+# One pipeline per service: same shape as the rusuh-queue caller, so each
+# app has its own run, its own history, and can be re-run alone.
+
+on:
+  pull_request:
+    paths:
+      - 'apps/notification/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.nvmrc'
+      - '.github/workflows/ci-notification.yml**'
+  push:
+    branches: [main]
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: PT-Meeting-Sampai-Malam-Konsultasi/rusuh-infra/.github/workflows/backend-ci.yml@v1
+    permissions:
+      contents: read
+      packages: write
+    with:
+      service: msmk-notification
+      runtime: node
+      runtime-version-file: .nvmrc
+      working-directory: .
+      setup: npm ci
+      lint: npm run lint --workspace=@rusuh/notification-service
+      test: npm test --workspace=@rusuh/notification-service
+      vuln: npm audit --audit-level=high
+      dockerfile: apps/notification/Dockerfile
+      context: .
+
+  cd:
+    needs: ci
+    if: github.ref_type == 'tag'
+    uses: PT-Meeting-Sampai-Malam-Konsultasi/rusuh-infra/.github/workflows/backend-cd.yml@v1
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+    with:
+      service: msmk-notification
+      environment: production
+      ecs-service: msmk-prod-notification
+      ecs-task-family: msmk-prod-notification
+      ecs-container: notification
