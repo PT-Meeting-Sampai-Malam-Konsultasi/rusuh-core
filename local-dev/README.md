@@ -62,10 +62,11 @@ cd apps/admin && npm start        # 8086
    the only place to read it in a real-test run. If that endpoint returns
    nothing on your LocalStack version, tell me and I will add a dev-only
    debug endpoint to the auth module instead.
-2. Create an event + categories via the admin API
+2. To exercise email change, call `POST /v1/auth/email-change` with a Bearer token and `{ "newEmail": "..." }`, then retrieve both six-digit codes from the LocalStack SES capture and submit them with the returned `challengeId` to `POST /v1/auth/email-change/verify`.
+3. Create an event + categories via the admin API
    (`POST /v1/admin/events`), or insert one directly into Postgres
    (`events` + `categories` tables) — the admin module is the supported path.
-3. Walk the journey: events → attendees/validate (NIK `3171010101900001`,
+4. Walk the journey: events → attendees/validate (NIK `3171010101900001`,
    a synthetic Dukcapil-mock NIK — the mock verifies format only, so any
    format-valid 16-digit NIK passes) → bookings → payment (Snap sandbox) →
    webhook → tickets → officer scan.
@@ -74,11 +75,11 @@ cd apps/admin && npm start        # 8086
 
 - Postgres init scripts run **once**, on first start (empty volume), in
   filename order. They are mounted from the modules' own sources
-  (`CREATE TABLE IF NOT EXISTS`): auth `db/migrations/001-003`, core
+  (`CREATE TABLE IF NOT EXISTS`): auth `db/migrations/001-004` (including `004_email_change.sql`), core
   `schema.sql` + `db/migrations/001`; only payment keeps a local copy
   (`postgres-init/06-payment.sql`). To re-apply after a schema change on an
   existing volume, run the file by hand:
-  `psql "postgres://rusuh:rusuh-dev@localhost:5432/rusuh" -f <file>`.
+  `psql "postgres://rusuh:rusuh-dev@localhost:5432/rusuh" -f <file>`. For email-change on an existing local database, run `apps/auth/db/migrations/004_email_change.sql` before starting auth.
 - `setup-env.sh` never overwrites an existing `apps/*/.env` (use `--force`).
   It generates fresh keys every run with `--force`, which invalidates
   tokens issued under the old keys — expected for local dev.

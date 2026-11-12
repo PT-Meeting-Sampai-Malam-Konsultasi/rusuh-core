@@ -29,6 +29,8 @@ in-memory adapters (no Postgres, Valkey, or AWS needed). Apply
 | `GET /v1/me`                | Bearer | My profile                                                |
 | `GET /v1/auth/profile`      | Bearer | Alias of `/me` (LLD-01 path)                              |
 | `PUT /v1/auth/profile`      | Bearer | Complete/update the profile (name only, no NIK)           |
+| `POST /v1/auth/email-change` | Bearer | Start an email change (a code to the old and new address) |
+| `POST /v1/auth/email-change/verify` | Bearer | Confirm with both codes; swaps the account email |
 
 Errors are RFC 9457 Problem JSON (`{type, title, status, code, detail, ...}`):
 400 `BAD_REQUEST`, 401 `UNAUTHORIZED`, 409 `WRONG_CODE` (with `attemptsLeft`),

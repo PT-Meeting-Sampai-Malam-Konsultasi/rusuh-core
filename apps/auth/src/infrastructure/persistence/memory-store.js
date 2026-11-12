@@ -10,6 +10,7 @@ function createMemoryStore() {
   const accountsByEmail = new Map(); // email -> id
   const profiles = new Map(); // accountId -> profile
   const otpChallenges = new Map(); // challengeId -> challenge
+  const emailChanges = new Map(); // challengeId -> email-change challenge
   const refreshTokens = new Map(); // id -> row
   const refreshTokensByHash = new Map(); // tokenHash -> id
   const accessTokens = new Map(); // jti -> record
@@ -127,6 +128,87 @@ function createMemoryStore() {
 
     async deleteOtpChallenge(id) {
       otpChallenges.delete(id);
+    },
+
+    async updateAccountEmail(accountId, email) {
+      const takenBy = accountsByEmail.get(email);
+      if (takenBy && takenBy !== accountId) {
+        const error = new Error('Email already in use');
+        error.code = 'EMAIL_TAKEN';
+        throw error;
+      }
+      const account = accounts.get(accountId);
+      if (!account) return null;
+      accountsByEmail.delete(account.email);
+      account.email = email;
+      account.updatedAt = now();
+      accountsByEmail.set(email, accountId);
+      return { ...account };
+    },
+
+    // -- email-change challenges ------------------------------------------
+    async createEmailChange({ accountId, newEmail, oldCodeHash, newCodeHash, locale, expiresAt }) {
+      const challenge = {
+        id: `ch_${crypto.randomBytes(12).toString('base64url')}`,
+        accountId,
+        newEmail,
+        oldCodeHash,
+        newCodeHash,
+        locale: locale || 'id',
+        expiresAt,
+        attempts: 0,
+        usedAt: null,
+        createdAt: now()
+      };
+      emailChanges.set(challenge.id, challenge);
+      return { ...challenge };
+    },
+
+    async findEmailChangeById(id) {
+      const challenge = emailChanges.get(id);
+      return challenge ? { ...challenge } : null;
+    },
+
+    async findLatestEmailChangeByAccount(accountId) {
+      let latest = null;
+      emailChanges.forEach((challenge) => {
+        if (challenge.accountId !== accountId) return;
+        if (!latest || challenge.createdAt > latest.createdAt) latest = challenge;
+      });
+      return latest ? { ...latest } : null;
+    },
+
+    async countEmailChangesSince(accountId, since) {
+      let count = 0;
+      emailChanges.forEach((challenge) => {
+        if (challenge.accountId === accountId && challenge.createdAt >= since) count += 1;
+      });
+      return count;
+    },
+
+    async expireEmailChangesForAccount(accountId, exceptId) {
+      const at = now();
+      emailChanges.forEach((challenge) => {
+        if (
+          challenge.accountId === accountId &&
+          challenge.id !== exceptId &&
+          !challenge.usedAt &&
+          challenge.expiresAt > at
+        ) {
+          challenge.expiresAt = at;
+        }
+      });
+    },
+
+    async updateEmailChange(id, patch) {
+      const challenge = emailChanges.get(id);
+      if (!challenge) return null;
+      Object.assign(challenge, patch);
+      return { ...challenge };
+    },
+
+    async deleteEmailChange(id) {
+      emailChanges.delete(id);
     },
 
     // -- refresh tokens ---------------------------------------------------

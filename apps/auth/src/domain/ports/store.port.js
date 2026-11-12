@@ -16,6 +16,14 @@
  * @property {function(string, string): Promise<void>} expireOtpChallengesForEmail - Expires an email's challenges except one.
  * @property {function(string, object): Promise<object|null>} updateOtpChallenge - Patches a challenge, or null.
  * @property {function(string): Promise<void>} deleteOtpChallenge - Deletes a challenge.
+ * @property {function(string, string): Promise<object|null>} updateAccountEmail - Sets an account's email; throws code EMAIL_TAKEN on a unique clash.
+ * @property {function({accountId: string, newEmail: string, oldCodeHash: string, newCodeHash: string, locale: string, expiresAt: Date}): Promise<object>} createEmailChange - Creates an email-change challenge.
+ * @property {function(string): Promise<object|null>} findEmailChangeById - Email-change challenge by id, or null.
+ * @property {function(string): Promise<object|null>} findLatestEmailChangeByAccount - Latest challenge for an account, or null.
+ * @property {function(string, Date): Promise<number>} countEmailChangesSince - Challenges for an account since a time.
+ * @property {function(string, string): Promise<void>} expireEmailChangesForAccount - Expires an account's open challenges except one.
+ * @property {function(string, object): Promise<object|null>} updateEmailChange - Patches a challenge, or null.
+ * @property {function(string): Promise<void>} deleteEmailChange - Deletes a challenge.
  * @property {function({accountId: string, familyId: string, tokenHash: string, expiresAt: Date, deviceLabel: string|null, currentAccessJti: string|null}): Promise<object>} createRefreshToken - Creates a refresh-token row.
  * @property {function(string): Promise<object|null>} findRefreshTokenByHash - Refresh row by token hash, or null.
  * @property {function(string, object): Promise<object|null>} updateRefreshToken - Patches a refresh row, or null.
