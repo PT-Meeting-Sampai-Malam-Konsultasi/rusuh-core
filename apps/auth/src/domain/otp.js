@@ -2,8 +2,9 @@ const crypto = require('crypto');
 
 /**
  * OTP domain rules (LLD-01 §7 + openapi.yaml limits).
- * Expiry 10 min (top of the decided 5–10 min range); resend cooldown 60 s;
- * 3 sends per email per 10 min; 5 verify attempts per challenge.
+ * Expiry defaults to 10 min (top of the decided 5–10 min range), overridable
+ * via the OTP_TTL_MS env var; resend cooldown 60 s; 3 sends per email per
+ * 10 min; 5 verify attempts per challenge.
  *
  * Pure: no I/O, no adapters — the use cases in application/ apply these
  * rules against the store/mailer/token ports.
@@ -74,6 +75,21 @@ function formatOtpExpiry(expiresAt, locale) {
   return `${id} WIB`;
 }
 
+/**
+ * Formats an OTP lifetime for the e-mail copy (rusuh-web#46): id "10 menit",
+ * en "10 minutes". The templates render the value verbatim, so the unit word
+ * is part of the string (English pluralizes, Indonesian does not).
+ *
+ * @param {number} ttlMs - OTP lifetime in milliseconds.
+ * @param {string} locale - 'id' | 'en'.
+ * @returns {string} Validity phrase, e.g. "5 menit" / "5 minutes".
+ */
+function formatOtpValidity(ttlMs, locale) {
+  const minutes = Math.max(1, Math.round(ttlMs / 60000));
+  if (locale === 'en') return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+  return `${minutes} menit`;
+}
+
 module.exports = {
   OTP_TTL_MS,
   OTP_RESEND_COOLDOWN_MS,
@@ -85,5 +101,6 @@ module.exports = {
   generateCode,
   normalizeEmail,
   spaceOtpCode,
-  formatOtpExpiry
+  formatOtpExpiry,
+  formatOtpValidity
 };

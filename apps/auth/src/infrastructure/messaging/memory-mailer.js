@@ -16,12 +16,19 @@ function createMemoryMailer() {
       failNext = true;
     },
 
-    async sendOtp({ to, code, locale, expiresAt }) {
+    async sendOtp({ to, code, locale, expiresAt, validFor }) {
       if (failNext) {
         failNext = false;
         throw new Error('Mailer unavailable (simulated)');
       }
-      sent.push({ to, code, locale: locale || 'id', expiresAt: expiresAt || null, sentAt: new Date() });
+      sent.push({
+        to,
+        code,
+        locale: locale || 'id',
+        expiresAt: expiresAt || null,
+        validFor: validFor || null,
+        sentAt: new Date()
+      });
     },
 
     async close() {

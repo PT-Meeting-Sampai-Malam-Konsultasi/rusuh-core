@@ -13,7 +13,7 @@ const { createTokenService } = require('@/infrastructure/tokens/token-service');
  * (and is testable) without Postgres, Valkey, or AWS.
  *
  * @param {object} config - Runtime configuration (loadEnvironment).
- * @returns {object} { store, denylist, mailer, tokens, logger, otpSecret }.
+ * @returns {object} { store, denylist, mailer, tokens, logger, otpSecret, otpTtlMs }.
  */
 function createDependencies(config = {}) {
   const logger = createLogger({ service: 'auth-module' });
@@ -37,7 +37,7 @@ function createDependencies(config = {}) {
     logger.info('OTP_SECRET is not set; using an ephemeral secret. Set it in production.');
   }
 
-  return { store, denylist, mailer, tokens, logger, otpSecret };
+  return { store, denylist, mailer, tokens, logger, otpSecret, otpTtlMs: config.otpTtlMs };
 }
 
 module.exports = { createDependencies };

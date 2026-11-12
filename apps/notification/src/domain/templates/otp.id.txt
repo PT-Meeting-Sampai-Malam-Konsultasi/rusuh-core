@@ -4,7 +4,7 @@ Kode masuk: {{code}}
 
 Masukkan di halaman Rusuh yang sedang Anda buka. Belum punya akun? Kode yang sama langsung membuatnya.
 
-Berlaku 10 menit, sampai pukul {{expires_at}}. Kode lama otomatis tidak berlaku saat Anda minta kode baru.
+Berlaku {{valid_for}}, sampai pukul {{expires_at}}. Kode lama otomatis tidak berlaku saat Anda minta kode baru.
 
 Jangan bagikan kode ini. Tim Rusuh tidak pernah memintanya, lewat telepon, chat, atau email.
 

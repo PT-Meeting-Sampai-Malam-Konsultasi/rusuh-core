@@ -1,7 +1,14 @@
 const { createMemoryStore } = require('@/infrastructure/persistence/memory-store');
 const { createMemoryMailer } = require('@/infrastructure/messaging/memory-mailer');
 const { createTokenService } = require('@/infrastructure/tokens/token-service');
-const { hmacCode, generateCode, normalizeEmail, spaceOtpCode, formatOtpExpiry } = require('@/domain/otp');
+const {
+  hmacCode,
+  generateCode,
+  normalizeEmail,
+  spaceOtpCode,
+  formatOtpExpiry,
+  formatOtpValidity
+} = require('@/domain/otp');
 const { createOtpUseCase } = require('../otp.use-case');
 
 function buildUseCase() {
@@ -24,6 +31,22 @@ describe('otp.use-case', () => {
       expect(mailer.sent).toHaveLength(1);
       expect(mailer.sent[0].to).toBe('rina@example.com');
       expect(mailer.sent[0].code).toMatch(/^[0-9]{6}$/);
+      expect(mailer.sent[0].validFor).toBe('10 menit');
+    });
+
+    it('honours a configured OTP TTL (OTP_TTL_MS env)', async () => {
+      const store = createMemoryStore();
+      const mailer = createMemoryMailer();
+      const tokens = createTokenService({ logger: { info: () => {} } });
+      const logger = { info: jest.fn(), error: jest.fn() };
+      const useCase = createOtpUseCase({ store, mailer, tokens, logger, otpSecret: 'test-secret', otpTtlMs: 300000 });
+      const before = Date.now();
+      const result = await useCase.requestOtp({ email: 'ttl@example.com' });
+      const expiresInMs = new Date(result.expiresAt).getTime() - before;
+      expect(expiresInMs).toBeGreaterThan(240000);
+      expect(expiresInMs).toBeLessThanOrEqual(300000);
+      // The e-mail copy follows the configured TTL, not the old hardcoded 10 min.
+      expect(mailer.sent[0].validFor).toBe('5 menit');
     });
 
     it('enforces the 60 s resend cooldown', async () => {
@@ -163,6 +186,13 @@ describe('otp.use-case', () => {
 
     it('spaceOtpCode joins the halves with a non-breaking space', () => {
       expect(spaceOtpCode('482019')).toBe(`482${String.fromCharCode(160)}019`);
+    });
+
+    it('formatOtpValidity renders the TTL phrase per locale', () => {
+      expect(formatOtpValidity(600000, 'id')).toBe('10 menit');
+      expect(formatOtpValidity(300000, 'id')).toBe('5 menit');
+      expect(formatOtpValidity(600000, 'en')).toBe('10 minutes');
+      expect(formatOtpValidity(60000, 'en')).toBe('1 minute');
     });
 
     it('formatOtpExpiry renders WIB clock times per locale', () => {
