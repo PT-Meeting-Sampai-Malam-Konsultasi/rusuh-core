@@ -1,0 +1,19 @@
+# OpenSSL advisories in the FROZEN runtime base image
+# gcr.io/distroless/nodejs20-debian12. Google stopped rebuilding the
+# nodejs20 distroless line after Node 20 reached end of life, so its
+# libssl3 (3.0.18) never receives the Debian security patches; every
+# build of any app fails the HIGH,CRITICAL image gate on these seven
+# CVEs. Exposure is theoretical for our services: Node bundles its own
+# statically linked OpenSSL and nothing dlopen()s the distroless
+# libssl3, but the scanner flags installed packages, not usage.
+#
+# TEMPORARY: delete this file when the runtime moves to a maintained
+# distroless line (nodejs22/nodejs24) — the Node 24 + Express 5
+# migration branch owns that change.
+CVE-2026-31789
+CVE-2026-28387
+CVE-2026-28388
+CVE-2026-28389
+CVE-2026-28390
+CVE-2026-45447
+CVE-2026-84782
