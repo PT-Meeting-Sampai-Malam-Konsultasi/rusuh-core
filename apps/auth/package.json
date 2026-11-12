@@ -21,7 +21,6 @@
   },
   "description": "Account service: passwordless email+OTP login, account JWT (Ed25519), opaque refresh tokens.",
   "devDependencies": {
-    "@redocly/cli": "^1.25.10",
     "cross-env": "^7.0.3",
     "eslint": "^8.57.1",
     "eslint-config-airbnb-base": "^15.0.0",
