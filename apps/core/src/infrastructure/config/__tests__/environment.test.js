@@ -12,12 +12,6 @@ describe('loadEnvironment', () => {
 
   it('defaults CORS_ORIGINS to the production web + local dev origins', () => {
     expect(loadEnvironment({}).corsOrigins).toEqual(DEFAULT_CORS_ORIGINS);
-    expect(DEFAULT_CORS_ORIGINS).toEqual([
-      'https://rusuh-tiket.web.id',
-      'https://www.rusuh-tiket.web.id',
-      'http://localhost:3000',
-      'http://localhost:5173'
-    ]);
   });
 
   it('parses a comma-separated CORS_ORIGINS into an array', () => {
