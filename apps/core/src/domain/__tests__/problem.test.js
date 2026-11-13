@@ -4,7 +4,7 @@ describe('problem (RFC 9457)', () => {
   it('renders the Problem body for a known code', () => {
     const body = problemBody('NOT_FOUND', 'No such resource for this caller.');
     expect(body).toMatchObject({
-      type: 'https://api.rusuh.id/problems/not-found',
+      type: 'https://api.rusuh-tiket.web.id/problems/not-found',
       title: 'Not found',
       status: 404,
       code: 'NOT_FOUND',

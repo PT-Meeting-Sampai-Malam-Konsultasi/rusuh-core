@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   attendees JSONB NOT NULL DEFAULT '[]'::jsonb,
   tickets JSONB NOT NULL DEFAULT '[]'::jsonb,
   snap_token TEXT,
+  redirect_url TEXT,
   paid_at TIMESTAMPTZ,
   payment_method TEXT,
   refund_required BOOLEAN NOT NULL DEFAULT FALSE,

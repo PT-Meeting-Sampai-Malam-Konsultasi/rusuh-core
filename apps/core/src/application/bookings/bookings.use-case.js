@@ -13,6 +13,38 @@ const PAYMENT_TTL_MS = 10 * 60 * 1000;
 const CONFIRMED_PAYMENT_STATUSES = new Set(['settlement', 'capture']);
 
 /**
+ * Builds the Midtrans item_details for a priced booking. Midtrans requires the
+ * item lines to sum exactly to gross_amount, so fees and tax are sent as their
+ * own lines next to the ticket lines.
+ *
+ * @param {object} price - Booking price breakdown (lines, total, fee split).
+ * @returns {Array<{id: string, price: number, quantity: number, name: string}>} Snap item lines.
+ */
+function snapItemDetails(price) {
+  const items = price.lines.map((line) => ({
+    id: line.categoryId,
+    price: line.unitPrice.amount,
+    quantity: line.quantity,
+    name: line.name
+  }));
+  const split = price.feeBreakdown || {};
+  const extras = [
+    ['platform_fee', 'Biaya platform', split.platformFee?.amount],
+    ['admin_fee', 'Biaya admin', split.adminFee?.amount],
+    ['tax_1', 'Pajak', split.tax1?.amount],
+    ['tax_2', split.tax2Label || 'Pajak lain', split.tax2?.amount]
+  ];
+  extras.forEach(([id, name, amount]) => {
+    if (amount > 0) items.push({ id, price: amount, quantity: 1, name });
+  });
+  const sum = items.reduce((total, item) => total + item.price * item.quantity, 0);
+  const gap = price.total.amount - sum;
+  // Bookings stored without a fee split (or rounding) still have to add up.
+  if (gap !== 0) items.push({ id: 'fees', price: gap, quantity: 1, name: 'Biaya layanan' });
+  return items;
+}
+
+/**
  * Booking use case (LLD-02 §5–§7, §10–§11).
  * States: SELECTION (5 min, no hold) -> PAYMENT_PENDING (10 min, hold)
  *   -> PAID / EXPIRED. A late successful callback NEVER resurrects (D11).
@@ -170,7 +202,25 @@ function createBookingUseCase({
     return store.mintTickets(booking, ticketRows);
   }
 
-  return {
+  let api;
+
+  /**
+   * Filters out a booking whose deadline has passed. A stale one is expired
+   * on the spot (releasing any hold) so it never blocks a fresh booking
+   * while the sweeper has not yet caught up.
+   *
+   * @param {object|null} booking - Active-looking booking from the store.
+   * @returns {Promise<object|null>} The booking when still live, otherwise null.
+   */
+  async function liveBooking(booking) {
+    if (!booking) return null;
+    const deadline = booking.status === 'PAYMENT_PENDING' ? booking.paymentExpiresAt : booking.expiresAt;
+    if (!deadline || new Date(deadline).getTime() > Date.now()) return booking;
+    await api.expireBooking(booking);
+    return null;
+  }
+
+  api = {
     /**
      * Creates a SELECTION booking (5 min). Hold happens at payment entry (§6),
      * not here — this step only soft-checks stock/quota (best-effort read).
@@ -180,9 +230,9 @@ function createBookingUseCase({
       if (!event) throw problemError('NOT_FOUND', 'No such resource for this caller.');
 
       // Idempotency (LLD-02 §5.1 step 3): the same admission returns its booking.
-      const existing = await store.getActiveBookingByAdmission(admission.token);
+      const existing = await liveBooking(await store.getActiveBookingByAdmission(admission.token));
       if (existing) return { booking: existing, created: false };
-      const accountActive = await store.getActiveBookingByAccountEvent(account.sub, eventId);
+      const accountActive = await liveBooking(await store.getActiveBookingByAccountEvent(account.sub, eventId));
       if (accountActive) {
         throw problemError('ACCOUNT_HAS_ACTIVE_BOOKING', 'Finish or cancel the active booking first.');
       }
@@ -405,12 +455,7 @@ function createBookingUseCase({
           attempt,
           orderId,
           grossAmount: transitioned.price.total.amount,
-          itemDetails: transitioned.price.lines.map((line) => ({
-            id: line.categoryId,
-            price: line.unitPrice.amount,
-            quantity: line.quantity,
-            name: line.name
-          })),
+          itemDetails: snapItemDetails(transitioned.price),
           snapStartTime: booking.createdAt
         });
       } catch (error) {
@@ -564,6 +609,7 @@ function createBookingUseCase({
       };
     }
   };
+  return api;
 }
 
 module.exports = { createBookingUseCase, SELECTION_TTL_MS, PAYMENT_TTL_MS };
