@@ -9,7 +9,7 @@ describe('createLogger', () => {
     const parsed = JSON.parse(lines[0]);
     expect(parsed.level).toBe('info');
     expect(parsed.service).toBe('test');
-    expect(parsed.message).toBe('Server started');
+    expect(parsed.event).toBe('Server started');
     expect(parsed.tags).toEqual(['server', 'listen']);
     expect(parsed.port).toBe(8081);
   });

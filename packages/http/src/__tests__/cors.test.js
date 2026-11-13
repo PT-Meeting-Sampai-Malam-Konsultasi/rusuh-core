@@ -69,6 +69,11 @@ describe('createCors', () => {
     expect(res.headers['access-control-allow-origin']).toBe('http://localhost:3000');
     expect(res.headers['access-control-allow-credentials']).toBe('true');
   });
+
+  it('exposes the canonical request ID to allowed browser clients', async () => {
+    const res = await request(app).get('/ping').set('Origin', 'http://localhost:3000');
+    expect(res.headers['access-control-expose-headers']).toMatch(/X-Request-ID/i);
+  });
 });
 
 describe('wildcard origins', () => {

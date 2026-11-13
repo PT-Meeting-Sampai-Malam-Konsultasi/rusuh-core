@@ -19,8 +19,7 @@ function createErrorHandler({ platform } = {}) {
   return (error, request, response, _next) => {
     if (response.headersSent) return;
 
-    const { correlationId } = request;
-    const traceId = correlationId || request.headers['x-correlation-id'] || undefined;
+    const traceId = request.requestId;
     let body;
     if (error && error.problem) {
       body = { ...error.problem, ...(traceId ? { traceId } : {}) };
@@ -38,17 +37,7 @@ function createErrorHandler({ platform } = {}) {
     }
     const statusCode = body.status || 500;
 
-    try {
-      const logger = platform.LoggerBuilder?.getLogger?.();
-      const metadata = platform.LoggerBuilder?.getMetadataFromRequest?.(request) || {};
-      logger
-        ?.addTags?.(['error-handler'])
-        ?.addData?.({ ...metadata, statusCode, error: error.message, code: body.code })
-        ?.error?.('API request failed');
-    } catch (_loggingError) {
-      // Logging failures must not prevent a safe error response.
-    }
-
+    response.locals.observabilityError = error;
     response.locals.skipResponseEnvelope = true;
     response.status(statusCode).json(body);
   };

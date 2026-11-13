@@ -12,24 +12,6 @@ function createResponseMiddleware({ platform } = {}) {
   if (!platform) throw new Error('createResponseMiddleware requires platform (injected by app.js)');
   return (request, response, next) => {
     const originalSend = response.send.bind(response);
-    let responseLogged = false;
-
-    response.on('finish', () => {
-      if (responseLogged) return;
-      responseLogged = true;
-
-      try {
-        const logger = platform.LoggerBuilder?.getLogger?.();
-        const metadata = platform.LoggerBuilder?.getMetadataFromRequest?.(request) || {};
-        const logData = platform.logRequest?.(request, { statusCode: response.statusCode }) || {};
-        logger
-          ?.addTags?.(['response-middleware', 'finish'])
-          ?.addData?.({ ...metadata, ...logData })
-          ?.info?.('API request completed');
-      } catch (_error) {
-        // Logging must never interfere with the request lifecycle.
-      }
-    });
 
     response.send = function sendWithEnvelope(payload) {
       if (response.locals.skipResponseEnvelope || response.headersSent || Buffer.isBuffer(payload)) {

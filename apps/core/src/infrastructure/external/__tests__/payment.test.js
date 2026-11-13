@@ -1,3 +1,4 @@
+const { runWithRequestContext } = require('@rusuh/observability');
 const { PaymentClient } = require('@/infrastructure/external/payment');
 
 function okJson(body, status = 200) {
@@ -59,6 +60,17 @@ describe('PaymentClient (LLD-03 internal client)', () => {
         headers: expect.objectContaining({ 'x-service-key': 'svc-key', 'content-type': 'application/json' })
       })
     );
+  });
+
+  it('forwards the canonical request ID to the internal payment service', async () => {
+    const fetchImpl = jest.fn(async () =>
+      okJson({ orderId: 'bk_1-1', snapToken: 'tok_1', redirectUrl: 'https://x/1' })
+    );
+    const client = new PaymentClient({ baseUrl, fetchImpl });
+    await runWithRequestContext({ requestId: 'c3f21ea6-f0e7-44d4-a346-3a42fac5fa94' }, () =>
+      client.createSnap({ bookingId: 'bk_1', attempt: 1, orderId: 'bk_1-1', grossAmount: 100, itemDetails: [] })
+    );
+    expect(fetchImpl.mock.calls[0][1].headers['X-Request-ID']).toBe('c3f21ea6-f0e7-44d4-a346-3a42fac5fa94');
   });
 
   it('createSnap strips a trailing slash from baseUrl and omits the service key when unset', async () => {

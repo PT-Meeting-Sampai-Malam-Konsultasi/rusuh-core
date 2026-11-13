@@ -94,7 +94,11 @@ function createOriginMatcher(origins) {
  */
 function createCors(origins) {
   const isAllowed = createOriginMatcher(origins);
-  return cors({ origin: (origin, callback) => callback(null, isAllowed(origin)), credentials: true });
+  return cors({
+    origin: (origin, callback) => callback(null, isAllowed(origin)),
+    credentials: true,
+    exposedHeaders: ['X-Request-ID']
+  });
 }
 
 module.exports = { DEFAULT_CORS_ORIGINS, parseCorsOrigins, createOriginMatcher, createCors };

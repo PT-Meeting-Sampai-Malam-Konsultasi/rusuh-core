@@ -27,24 +27,17 @@ describe('createErrorHandler (Problem JSON, RFC 9457)', () => {
     expect(() => createErrorHandler({})).toThrow('createErrorHandler requires platform');
   });
 
-  it('renders a problemError as-is, with the traceId when a correlation id is present', () => {
+  it('renders a problemError as-is, with the canonical request ID as traceId', () => {
     const handler = createErrorHandler({ platform: defaultPlatform });
     const response = makeResponse();
-    const request = { correlationId: 'trace-1', headers: {} };
+    const request = { requestId: 'c3f21ea6-f0e7-44d4-a346-3a42fac5fa94', headers: {} };
     handler(problemError('NOT_FOUND', 'No such resource for this caller.'), request, response, () => {});
     expect(response.statusCode).toBe(404);
-    expect(response.body).toMatchObject({ code: 'NOT_FOUND', status: 404, traceId: 'trace-1' });
+    expect(response.body).toMatchObject({ code: 'NOT_FOUND', status: 404, traceId: request.requestId });
     expect(response.locals.skipResponseEnvelope).toBe(true);
   });
 
-  it('falls back to the x-correlation-id header when there is no correlationId', () => {
-    const handler = createErrorHandler({ platform: defaultPlatform });
-    const response = makeResponse();
-    handler(problemError('NOT_FOUND'), { headers: { 'x-correlation-id': 'trace-2' } }, response, () => {});
-    expect(response.body.traceId).toBe('trace-2');
-  });
-
-  it('omits traceId when there is no correlation id at all', () => {
+  it('omits traceId when request context has not established an ID', () => {
     const handler = createErrorHandler({ platform: defaultPlatform });
     const response = makeResponse();
     handler(problemError('NOT_FOUND'), { headers: {} }, response, () => {});

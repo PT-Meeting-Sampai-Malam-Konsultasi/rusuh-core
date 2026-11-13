@@ -10,6 +10,8 @@
  * unless the caller injected a stub. Stub mode is logged by the caller.
  */
 
+const { createOutboundHeaders } = require('@rusuh/observability');
+
 class PaymentClient {
   /**
    * @param {object} options
@@ -36,10 +38,10 @@ class PaymentClient {
     try {
       const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
         method,
-        headers: {
+        headers: createOutboundHeaders({
           'content-type': 'application/json',
           ...(this.serviceKey ? { 'x-service-key': this.serviceKey } : {})
-        },
+        }),
         ...(body ? { body: JSON.stringify(body) } : {}),
         signal: controller.signal
       });

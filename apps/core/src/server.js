@@ -1,9 +1,10 @@
 require('./alias');
 require('dotenv').config();
 
+// Must stay above every require that can load http/express (see the module doc).
+const { config, logger, telemetry } = require('@/observability-bootstrap');
 const http = require('http');
 const defaultPlatform = require('@/platform/common');
-const { loadEnvironment } = require('@/infrastructure/config/environment');
 const { createApp } = require('@/app');
 const { createDeps } = require('@/container');
 
@@ -15,12 +16,11 @@ const { createDeps } = require('@/container');
  * @returns {Promise<http.Server>} Active HTTP server.
  */
 async function startServer() {
-  const config = loadEnvironment();
   const deps = await createDeps(config);
   // Declared before createApp so /readyz can read it: once shutdown starts
   // (SIGTERM), /readyz answers 503 so the ALB stops sending new requests.
   let shuttingDown = false;
-  const app = createApp({ config, deps, isShuttingDown: () => shuttingDown });
+  const app = createApp({ config, deps, logger, isShuttingDown: () => shuttingDown });
   const server = http.createServer(app);
 
   // Background worker (D9 sweeper).
@@ -37,8 +37,8 @@ async function startServer() {
     if (shuttingDown) return;
     shuttingDown = true;
 
-    const logger = defaultPlatform.LoggerBuilder?.getLogger?.();
-    logger?.addTags?.(['server', 'shutdown'])?.addData?.({ signal })?.info?.('Graceful shutdown started');
+    const legacyLogger = defaultPlatform.LoggerBuilder?.getLogger?.();
+    legacyLogger?.addTags?.(['server', 'shutdown'])?.addData?.({ signal })?.info?.('Graceful shutdown started');
 
     deps.sweeper.stop();
     deps.queueFeedWorker.stop();
@@ -48,7 +48,12 @@ async function startServer() {
     timeout.unref();
     server.close(() => {
       clearTimeout(timeout);
-      process.exit(0);
+      const shutdownTimeout = new Promise((resolve) => {
+        setTimeout(resolve, 3000);
+      });
+      Promise.race([telemetry.shutdown(), shutdownTimeout])
+        .catch(() => logger.warn('telemetry.shutdown.failed'))
+        .finally(() => process.exit(0));
     });
   }
 

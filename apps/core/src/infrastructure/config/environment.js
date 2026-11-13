@@ -62,7 +62,16 @@ const environmentSchema = Joi.object({
   ADMISSION_TTL_MS: Joi.number()
     .integer()
     .positive()
-    .default(16 * 60 * 1000)
+    .default(16 * 60 * 1000),
+  LOG_FORMAT: Joi.string().valid('json', 'text'),
+  LOG_LEVEL: Joi.string().valid('debug', 'info', 'warn', 'error').default('info'),
+  SERVICE_INSTANCE_ID: Joi.string().max(128).allow(''),
+  OTEL_TRACES_EXPORTER: Joi.string().valid('none', 'otlp').default('none'),
+  OTEL_ENDPOINT: Joi.string().allow('').default('http://localhost:4318'),
+  OTEL_TRACES_SAMPLER: Joi.string()
+    .valid('parentbased_always_on', 'parentbased_traceidratio')
+    .default('parentbased_always_on'),
+  OTEL_TRACES_SAMPLER_ARG: Joi.number().min(0).max(1).default(1)
 }).unknown(true);
 
 /**
@@ -119,7 +128,16 @@ function loadEnvironment(environment = process.env) {
     queueFeedIntervalMs: value.QUEUE_FEED_INTERVAL_MS,
     outboxRelayIntervalMs: value.OUTBOX_RELAY_INTERVAL_MS,
     dukcapilTimeoutMs: value.DUKCAPIL_TIMEOUT_MS,
-    admissionTtlMs: value.ADMISSION_TTL_MS
+    admissionTtlMs: value.ADMISSION_TTL_MS,
+    observability: {
+      logFormat: value.LOG_FORMAT || (['production', 'staging'].includes(value.NODE_ENV) ? 'json' : 'text'),
+      logLevel: value.LOG_LEVEL,
+      serviceInstanceId: value.SERVICE_INSTANCE_ID || null,
+      tracesExporter: value.OTEL_TRACES_EXPORTER,
+      endpoint: value.OTEL_ENDPOINT,
+      sampler: value.OTEL_TRACES_SAMPLER,
+      samplerArg: value.OTEL_TRACES_SAMPLER_ARG
+    }
   };
 }
 
