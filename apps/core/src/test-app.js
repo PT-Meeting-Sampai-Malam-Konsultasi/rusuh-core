@@ -44,7 +44,7 @@ async function createTestApp({
   const stock = new MemoryStock();
   const eventBus = new MemoryEventBus();
 
-  const admissionToken = 'adm_test01JB2Y5W3N8Qm4sT7vY2xK9pL';
+  const admissionToken = 'admission-test-token';
   const admissionEntry = admission || {
     user_id: accountSub,
     event_id: 'evt_2026_gbk',
