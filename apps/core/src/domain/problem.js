@@ -26,7 +26,7 @@ const ALL_CODES = Object.freeze({ ...ERROR_CODES, ...EXTRA_CODES });
 function problemBody(code, detail, extra = {}) {
   const known = ALL_CODES[code] || { status: 500, title: 'Internal Server Error' };
   return {
-    type: `https://api.rusuh.id/problems/${code.toLowerCase().replace(/_/g, '-')}`,
+    type: `https://api.rusuh-tiket.web.id/problems/${code.toLowerCase().replace(/_/g, '-')}`,
     title: known.title,
     status: known.status,
     code,

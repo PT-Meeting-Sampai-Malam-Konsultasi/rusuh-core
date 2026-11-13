@@ -100,6 +100,20 @@ describe('booking use case (state transitions)', () => {
     ).rejects.toMatchObject({ code: 'ACCOUNT_HAS_ACTIVE_BOOKING' });
   });
 
+  it('lets the account create a new booking once the previous one passed its deadline', async () => {
+    const { useCase, store } = buildUseCase();
+    const first = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+    await store.updateBooking(first.booking.bookingId, { expiresAt: new Date(Date.now() - 1000).toISOString() });
+    const second = await useCase.createBooking(
+      ACCOUNT,
+      { token: 'adm_2', slotId: 's_2', maxTickets: 3 },
+      createBody(makeValidationToken())
+    );
+    expect(second.created).toBe(true);
+    expect(second.booking.bookingId).not.toBe(first.booking.bookingId);
+    expect((await store.getBooking(first.booking.bookingId)).status).toBe('EXPIRED');
+  });
+
   it('rejects more tickets than the admission allows (QUANTITY_OVER_RESERVATION)', async () => {
     const { useCase } = buildUseCase();
     const token = makeValidationToken();
@@ -350,6 +364,32 @@ describe('booking use case (error paths)', () => {
     await expect(useCase.getBooking('bk_missing', { account: { sub: 'acc_1' } })).rejects.toMatchObject({
       code: 'NOT_FOUND'
     });
+  });
+
+  it('sends Snap item lines that add up to the gross amount (fees and tax included)', async () => {
+    const createSnap = jest.fn(async ({ orderId }) => ({
+      orderId,
+      snapToken: 'snap-1',
+      redirectUrl: 'https://pay.example/1'
+    }));
+    const { useCase, stock } = buildUseCase({
+      payment: { isStub: false, createSnap, getStatus: async () => null, expire: async () => {} }
+    });
+    await stock.setAdmission(
+      'adm_1',
+      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1', max_tickets: 3 },
+      60000
+    );
+    const { booking } = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+    const result = await useCase.enterPayment(booking.bookingId, {
+      account: { sub: 'acc_1' },
+      admission: { token: 'adm_1' }
+    });
+    const call = createSnap.mock.calls[0][0];
+    const sum = call.itemDetails.reduce((total, item) => total + item.price * item.quantity, 0);
+    expect(call.grossAmount).toBeGreaterThan(3500000);
+    expect(sum).toBe(call.grossAmount);
+    expect(result.redirectUrl).toBe('https://pay.example/1');
   });
 
   it('enterPayment refuses a PAID booking and an expired SELECTION booking (BOOKING_NOT_HELD)', async () => {

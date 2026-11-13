@@ -627,6 +627,7 @@ class PgStore {
       attendees: typeof row.attendees === 'string' ? JSON.parse(row.attendees) : row.attendees,
       tickets: typeof row.tickets === 'string' ? JSON.parse(row.tickets) : row.tickets || [],
       snapToken: row.snap_token || null,
+      redirectUrl: row.redirect_url || null,
       paidAt: row.paid_at ? new Date(row.paid_at).toISOString() : null,
       paymentMethod: row.payment_method || null,
       refundRequired: Boolean(row.refund_required),
