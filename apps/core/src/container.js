@@ -22,6 +22,7 @@ const { AuthClient } = require('./infrastructure/external/auth');
 const { MemoryEventBus, SqsEventBus } = require('./infrastructure/messaging/events');
 const { Sweeper } = require('./infrastructure/sweeper');
 const { QueueFeedWorker } = require('./infrastructure/queue-feed-worker');
+const { createEventAssets } = require('./infrastructure/storage/event-assets');
 
 /**
  * Builds the core-module dependency graph.
@@ -146,6 +147,8 @@ function createDefaultDeps(config, overrides = {}) {
     refundWindowLabel: config.refundWindowLabel
   };
   const eventBus = overrides.eventBus || new MemoryEventBus();
+  const eventAssets =
+    overrides.eventAssets || createEventAssets({ bucket: config.assetsBucket, region: config.awsRegion });
   if (!overrides.eventBus && config.nodeEnv !== 'test') {
     warn('SQS queue URLs not set: using in-memory event bus (events are not delivered).');
   }
@@ -201,6 +204,7 @@ function createDefaultDeps(config, overrides = {}) {
     accounts,
     emailConfig,
     eventBus,
+    eventAssets,
     publicKeys,
     devPrivateJwk,
     isDenied,

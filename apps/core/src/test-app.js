@@ -32,7 +32,8 @@ async function createTestApp({
   dukcapilReason = null,
   payment = {},
   admission = null,
-  serviceKey = 'test-service-key'
+  serviceKey = 'test-service-key',
+  eventAssets
 } = {}) {
   const config = loadEnvironment({
     NODE_ENV: 'test',
@@ -89,7 +90,16 @@ async function createTestApp({
     requireServiceKey: createRequireServiceKey({ serviceKey })
   };
 
-  const deps = createDefaultDeps(config, { store, stock, dukcapil, payment: paymentStub, eventBus, accounts, auth });
+  const deps = createDefaultDeps(config, {
+    store,
+    stock,
+    dukcapil,
+    payment: paymentStub,
+    eventBus,
+    accounts,
+    auth,
+    eventAssets
+  });
   const app = createApp({ config, deps });
   return { app, deps, admissionToken, accountToken: 'test-account-token' };
 }

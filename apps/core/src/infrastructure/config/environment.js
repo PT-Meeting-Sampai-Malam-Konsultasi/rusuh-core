@@ -28,6 +28,8 @@ const environmentSchema = Joi.object({
   AWS_REGION: Joi.string().default('ap-southeast-3'),
   SQS_EMPTY_SLOT_QUEUE_URL: Joi.string().uri().allow(''),
   SQS_NOTIFICATION_QUEUE_URL: Joi.string().uri().allow(''),
+  // Browser-facing event images are served through the API from this private bucket.
+  ASSETS_BUCKET: Joi.string().allow(''),
   // NIK keys (D24). Production: from KMS/Secrets Manager. Dev: derived/fixed.
   NIK_HMAC_KEY: Joi.string().default('rusuh-dev-nik-hmac-key'),
   NIK_ENCRYPTION_KEY: Joi.string().allow(''),
@@ -97,6 +99,7 @@ function loadEnvironment(environment = process.env) {
     webBaseUrl: value.WEB_BASE_URL,
     refundWindowLabel: { id: value.REFUND_WINDOW_LABEL, en: value.REFUND_WINDOW_LABEL_EN },
     awsRegion: value.AWS_REGION,
+    assetsBucket: value.ASSETS_BUCKET || null,
     sqsNotificationQueueUrl: value.SQS_NOTIFICATION_QUEUE_URL || null,
     nikHmacKey: value.NIK_HMAC_KEY,
     nikEncryptionKey: value.NIK_ENCRYPTION_KEY || null,
