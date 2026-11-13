@@ -1,40 +1,20 @@
 /* eslint-disable max-classes-per-file -- Memory + SQS buses share one file by design. */
-const crypto = require('crypto');
 const { SQSClient, SendMessageCommand } = require('@aws-sdk/client-sqs');
 
 /**
  * Event bus (SQS, ADR-0023). Two implementations behind one interface:
  *  - MemoryEventBus: in-memory, records published events (tests, local dev).
- *  - SqsEventBus: @aws-sdk/client-sqs, sends to the configured queue URLs.
+ *  - SqsEventBus: @aws-sdk/client-sqs, sends to the notification queue.
  *
- * Queues (logical): empty-slot (core -> queue), notification
- * (core -> notification-module, email jobs). The admission queue is gone:
- * admission registration is synchronous via POST /v1/core/admission
- * (ADR-0027 replaces the SQS admission event, ADR-0021/0023).
- * Physical names follow the infra convention: rusuh-<env>-<name>.
+ * Only the notification queue (core -> notification-module, email jobs) is
+ * left. Admission registration is synchronous (POST /v1/core/admission,
+ * ADR-0027), and the queue hears of bookings through stream:booking and the
+ * core:* keys (BR-06-C1), which replace the SQS empty-slot message.
  */
-
-function emptySlotEvent({ eventId, released, releasedIds, reason }) {
-  return {
-    id: crypto.randomUUID(),
-    event_id: eventId,
-    released,
-    released_ids: releasedIds,
-    reason,
-    emitted_at: new Date().toISOString()
-  };
-}
 
 class MemoryEventBus {
   constructor() {
-    this.emptySlotEvents = [];
     this.emailJobs = [];
-  }
-
-  async publishEmptySlot(event) {
-    const full = event.id ? event : emptySlotEvent(event);
-    this.emptySlotEvents.push(full);
-    return full;
   }
 
   async sendEmailJob(envelope) {
@@ -47,38 +27,25 @@ class SqsEventBus {
   /**
    * @param {object} options
    * @param {object} options.client - SQSClient (@aws-sdk/client-sqs).
-   * @param {string} options.emptySlotQueueUrl
    * @param {string} options.notificationQueueUrl
    */
-  constructor({ client, emptySlotQueueUrl, notificationQueueUrl }) {
+  constructor({ client, notificationQueueUrl }) {
     this.client = client;
-    this.emptySlotQueueUrl = emptySlotQueueUrl;
     this.notificationQueueUrl = notificationQueueUrl;
   }
 
-  static async create({ region, emptySlotQueueUrl, notificationQueueUrl }) {
-    return new SqsEventBus({
-      client: new SQSClient({ region }),
-      emptySlotQueueUrl,
-      notificationQueueUrl
-    });
-  }
-
-  async _send(queueUrl, body) {
-    await this.client.send(new SendMessageCommand({ QueueUrl: queueUrl, MessageBody: JSON.stringify(body) }));
-    return body;
-  }
-
-  async publishEmptySlot(event) {
-    const full = event.id ? event : emptySlotEvent(event);
-    return this._send(this.emptySlotQueueUrl, full);
+  static async create({ region, notificationQueueUrl }) {
+    return new SqsEventBus({ client: new SQSClient({ region }), notificationQueueUrl });
   }
 
   async sendEmailJob(envelope) {
     // The envelope is sent as-is: notification-module validates the SQS body
     // strictly (unknown(false)), so no wrapper keys may be added here.
-    return this._send(this.notificationQueueUrl, envelope);
+    await this.client.send(
+      new SendMessageCommand({ QueueUrl: this.notificationQueueUrl, MessageBody: JSON.stringify(envelope) })
+    );
+    return envelope;
   }
 }
 
-module.exports = { MemoryEventBus, SqsEventBus, emptySlotEvent };
+module.exports = { MemoryEventBus, SqsEventBus };

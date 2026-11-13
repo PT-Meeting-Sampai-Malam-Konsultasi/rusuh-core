@@ -91,6 +91,13 @@ end
 return {1}
 `;
 
+/** The Lua scripts read snake_case item fields; the use case speaks camelCase. */
+function luaItemsJson(items) {
+  return JSON.stringify(
+    items.map((item) => ({ category_id: item.categoryId, qty: item.qty, nik_hmacs: item.nikHmacs }))
+  );
+}
+
 function stockKey(eventId, categoryId, field) {
   return `stock:${eventId}:${categoryId}:${field}`;
 }
@@ -241,7 +248,7 @@ class RedisStock {
   }
 
   async checkAndHold(eventId, items) {
-    const result = await this.client.checkAndHold(JSON.stringify(items), MAX_SEATS_PER_NIK, eventId);
+    const result = await this.client.checkAndHold(luaItemsJson(items), MAX_SEATS_PER_NIK, eventId);
     if (result[0] === 1) return { ok: true };
     // The Lua returns the final API error code directly; pass it through unchanged.
     if (result[1] === 'CATEGORY_SOLD_OUT') return { ok: false, code: 'CATEGORY_SOLD_OUT', categoryId: result[2] };
@@ -249,12 +256,12 @@ class RedisStock {
   }
 
   async release(eventId, items) {
-    await this.client.releaseHold(JSON.stringify(items), eventId);
+    await this.client.releaseHold(luaItemsJson(items), eventId);
     return { ok: true };
   }
 
   async settle(eventId, items) {
-    await this.client.settleHold(JSON.stringify(items), eventId);
+    await this.client.settleHold(luaItemsJson(items), eventId);
     return { ok: true };
   }
 

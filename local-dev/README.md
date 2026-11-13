@@ -76,7 +76,7 @@ cd apps/admin && npm start        # 8086
 - Postgres init scripts run **once**, on first start (empty volume), in
   filename order. They are mounted from the modules' own sources
   (`CREATE TABLE IF NOT EXISTS`): auth `db/migrations/001-004` (including `004_email_change.sql`), core
-  `schema.sql` + `db/migrations/001`; only payment keeps a local copy
+  `schema.sql` + `db/migrations/001`–`002`; only payment keeps a local copy
   (`postgres-init/06-payment.sql`). To re-apply after a schema change on an
   existing volume, run the file by hand:
   `psql "postgres://rusuh:rusuh-dev@localhost:5432/rusuh" -f <file>`. For email-change on an existing local database, run `apps/auth/db/migrations/004_email_change.sql` before starting auth.

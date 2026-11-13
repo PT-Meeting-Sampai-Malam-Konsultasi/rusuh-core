@@ -2,6 +2,9 @@ const crypto = require('crypto');
 const { loadEnvironment } = require('@/infrastructure/config/environment');
 const { createDefaultDeps, createDeps } = require('@/container');
 const { MemoryStore } = require('@/infrastructure/persistence/store');
+const { RedisStock } = require('@/infrastructure/cache/stock');
+const { RedisQueueFeed } = require('@/infrastructure/cache/queue-feed');
+const { SqsEventBus } = require('@/infrastructure/messaging/events');
 
 function baseConfig(overrides = {}) {
   return loadEnvironment({ NODE_ENV: 'test', ...overrides });
@@ -107,5 +110,40 @@ describe('container (composition root)', () => {
     } finally {
       console.error = origError;
     }
+  });
+
+  describe('queue feed (BR-06-C1)', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it('the default graph feeds an in-memory queue from the stock counters', async () => {
+      const deps = createDefaultDeps(baseConfig());
+      expect(deps.queueFeedWorker).toBeDefined();
+      const result = await deps.queueFeedWorker.syncOnce(new Date('2026-11-15T00:00:00Z'));
+      expect(result.listed).toEqual(['evt_2026_gbk']);
+      expect(deps.feed.stocks.get('evt_2026_gbk')).toMatchObject({ available: 12000 });
+    });
+
+    it('createDeps with VALKEY_URL writes the feed through the stock client and keeps the workers wired', async () => {
+      const client = { defineCommand: jest.fn() };
+      const stock = { client, isDenied: async () => false, close: async () => {} };
+      jest.spyOn(RedisStock, 'connect').mockResolvedValue(stock);
+      const deps = await createDeps(baseConfig({ VALKEY_URL: 'redis://localhost:6379' }));
+      expect(deps.feed).toBeInstanceOf(RedisQueueFeed);
+      expect(deps.feed.client).toBe(client);
+      expect(deps.queueFeedWorker.queueFeed).toBe(deps.useCases.queueFeed);
+    });
+
+    it('createDeps sends e-mail over SQS with only the notification queue configured', async () => {
+      const create = jest.spyOn(SqsEventBus, 'create').mockResolvedValue({ sendEmailJob: async () => {} });
+      await createDeps(baseConfig({ SQS_NOTIFICATION_QUEUE_URL: 'https://sqs/notification' }));
+      expect(create).toHaveBeenCalledWith({
+        region: 'ap-southeast-3',
+        notificationQueueUrl: 'https://sqs/notification'
+      });
+    });
+
+    it('still boots with the retired SQS_EMPTY_SLOT_QUEUE_URL set', () => {
+      expect(() => baseConfig({ SQS_EMPTY_SLOT_QUEUE_URL: 'https://sqs/empty-slot' })).not.toThrow();
+    });
   });
 });

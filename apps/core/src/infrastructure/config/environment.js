@@ -21,9 +21,10 @@ const environmentSchema = Joi.object({
   AUTH_URL: Joi.string().uri().allow(''),
   SERVICE_KEY: Joi.string().allow(''),
   // SQS (ADR-0023). Unset = in-memory event bus (local dev).
-  // Only empty-slot (core -> queue) and notification (core ->
-  // notification-module) remain: admission registration is synchronous
-  // via POST /v1/core/admission (ADR-0027), not an SQS queue.
+  // Only notification (core -> notification-module) remains: admission
+  // registration is synchronous (POST /v1/core/admission, ADR-0027) and the
+  // queue reads stream:booking + core:* keys (BR-06-C1). SQS_EMPTY_SLOT_QUEUE_URL
+  // is still accepted so an older task definition boots, but nothing uses it.
   AWS_REGION: Joi.string().default('ap-southeast-3'),
   SQS_EMPTY_SLOT_QUEUE_URL: Joi.string().uri().allow(''),
   SQS_NOTIFICATION_QUEUE_URL: Joi.string().uri().allow(''),
@@ -52,6 +53,9 @@ const environmentSchema = Joi.object({
   REFUND_WINDOW_LABEL_EN: Joi.string().default('14 business days'),
   // Background workers.
   SWEEP_INTERVAL_MS: Joi.number().integer().positive().default(30000),
+  // Queue feed (shared-keys.md): sale + stock + list every 5 s, outbox relay every 1 s.
+  QUEUE_FEED_INTERVAL_MS: Joi.number().integer().positive().default(5000),
+  OUTBOX_RELAY_INTERVAL_MS: Joi.number().integer().positive().default(1000),
   DUKCAPIL_TIMEOUT_MS: Joi.number().integer().positive().default(2000),
   ADMISSION_TTL_MS: Joi.number()
     .integer()
@@ -93,7 +97,6 @@ function loadEnvironment(environment = process.env) {
     webBaseUrl: value.WEB_BASE_URL,
     refundWindowLabel: { id: value.REFUND_WINDOW_LABEL, en: value.REFUND_WINDOW_LABEL_EN },
     awsRegion: value.AWS_REGION,
-    sqsEmptySlotQueueUrl: value.SQS_EMPTY_SLOT_QUEUE_URL || null,
     sqsNotificationQueueUrl: value.SQS_NOTIFICATION_QUEUE_URL || null,
     nikHmacKey: value.NIK_HMAC_KEY,
     nikEncryptionKey: value.NIK_ENCRYPTION_KEY || null,
@@ -110,6 +113,8 @@ function loadEnvironment(environment = process.env) {
       tax2Label: value.TAX2_LABEL
     },
     sweepIntervalMs: value.SWEEP_INTERVAL_MS,
+    queueFeedIntervalMs: value.QUEUE_FEED_INTERVAL_MS,
+    outboxRelayIntervalMs: value.OUTBOX_RELAY_INTERVAL_MS,
     dukcapilTimeoutMs: value.DUKCAPIL_TIMEOUT_MS,
     admissionTtlMs: value.ADMISSION_TTL_MS
   };

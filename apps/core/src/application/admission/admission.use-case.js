@@ -26,6 +26,7 @@ function createAdmissionUseCase({ stock, ttlMs = 16 * 60 * 1000 } = {}) {
         user_id: admission.user_id,
         event_id: admission.event_id,
         slot_id: admission.slot_id || null,
+        device_id: admission.device_id || null,
         max_tickets: admission.max_tickets || 3,
         expires_at: admission.expires_at || new Date(Date.now() + ttlMs).toISOString()
       };

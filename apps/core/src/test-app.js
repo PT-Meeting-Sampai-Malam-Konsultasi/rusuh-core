@@ -48,6 +48,7 @@ async function createTestApp({
     user_id: accountSub,
     event_id: 'evt_2026_gbk',
     slot_id: 's_test01JB7Q9K2M',
+    device_id: 'w_test01JB2Y5W3N8Qm4sT',
     max_tickets: 3,
     expires_at: new Date(Date.now() + 16 * 60 * 1000).toISOString()
   };

@@ -43,8 +43,8 @@ Errors are RFC 9457 Problem JSON (repo contract, `api/openapi.yaml`).
 - `cap = 0` is PAUSE (no new admission; pause = cap=0, item 13, 6 Nov).
   Negative cap is rejected (400).
 - CAP lives in the event model (Postgres), never in Valkey (model event,
-  ADR-0022). Core uses the effective CAP to compute empty slots + publish
-  empty-slot events. Changing CAP works even when Valkey is down.
+  ADR-0022). Core uses the effective CAP to compute empty slots.
+  Changing CAP works even when Valkey is down.
 - Slot stats come from core (Postgres booking states), not from Valkey and
   not from a queue stats endpoint: `held` = tickets in PAYMENT_PENDING
   bookings, `sold` = tickets in PAID bookings,

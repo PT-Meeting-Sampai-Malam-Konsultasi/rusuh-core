@@ -34,6 +34,7 @@ services:
       - ../apps/auth/db/migrations/003_account_roles.sql:/docker-entrypoint-initdb.d/03-auth-account-roles.sql:ro
       - ../apps/core/src/infrastructure/persistence/schema.sql:/docker-entrypoint-initdb.d/04-core.sql:ro
       - ../apps/core/db/migrations/001_admin_schema_alignment.sql:/docker-entrypoint-initdb.d/05-core-admin-alignment.sql:ro
+      - ../apps/core/db/migrations/002_queue_feed.sql:/docker-entrypoint-initdb.d/05-core-queue-feed.sql:ro
       - ./postgres-init/06-payment.sql:/docker-entrypoint-initdb.d/06-payment.sql:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U rusuh -d rusuh']

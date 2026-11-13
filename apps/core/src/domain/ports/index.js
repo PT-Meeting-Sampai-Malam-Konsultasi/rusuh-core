@@ -79,11 +79,9 @@
  */
 
 /**
- * Event bus port: empty-slot events (core -> queue) and email jobs
- * (core -> notification-module). Implemented by MemoryEventBus / SqsEventBus
+ * Event bus port: email jobs (core -> notification-module). Implemented by MemoryEventBus / SqsEventBus
  * (infrastructure/messaging/events.js).
  *
  * @typedef {object} EventBusPort
- * @property {Function} publishEmptySlot - ({event_id, released, released_ids, reason}) => Promise<object>.
  * @property {Function} sendEmailJob - ({booking_id, type, to, payload}) => Promise<object>.
  */

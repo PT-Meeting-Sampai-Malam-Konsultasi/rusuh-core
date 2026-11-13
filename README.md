@@ -42,4 +42,4 @@ Per-service: `cd apps/<name> && npm run check` (format + lint + tests + coverage
 - Decisions log: `keputusan-diskusi-rusuh-core-2026-10-27.md` (goals workspace).
 - Queue-module (Go) lives in [`rusuh-queue`](https://github.com/PT-Meeting-Sampai-Malam-Konsultasi/rusuh-queue);
   this repo only implements the Node modules and the inter-service contracts
-  (admission events via SQS, empty-slot events).
+  (admission events via SQS; the `core:*` keys and `stream:booking` that the queue reads from Valkey).

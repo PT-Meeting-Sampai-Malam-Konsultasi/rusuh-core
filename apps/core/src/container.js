@@ -5,6 +5,7 @@ const { createAttendeesUseCase } = require('@/application/attendees/attendees.us
 const { createBookingUseCase } = require('@/application/bookings/bookings.use-case');
 const { createTicketsUseCase } = require('@/application/tickets/tickets.use-case');
 const { createAdmissionUseCase } = require('@/application/admission/admission.use-case');
+const { createQueueFeedUseCase } = require('@/application/queue-feed/queue-feed.use-case');
 const {
   createRequireAccount,
   createRequireAdmission,
@@ -14,11 +15,13 @@ const {
 } = require('@/presentation/http/middleware/auth');
 const { MemoryStore, PgStore } = require('./infrastructure/persistence/store');
 const { MemoryStock, RedisStock } = require('./infrastructure/cache/stock');
+const { MemoryQueueFeed, RedisQueueFeed } = require('./infrastructure/cache/queue-feed');
 const { DukcapilClient } = require('./infrastructure/external/dukcapil');
 const { PaymentClient } = require('./infrastructure/external/payment');
 const { AuthClient } = require('./infrastructure/external/auth');
 const { MemoryEventBus, SqsEventBus } = require('./infrastructure/messaging/events');
 const { Sweeper } = require('./infrastructure/sweeper');
+const { QueueFeedWorker } = require('./infrastructure/queue-feed-worker');
 
 /**
  * Builds the core-module dependency graph.
@@ -53,6 +56,7 @@ function buildAuth({ publicKeys, isDenied, stock, serviceKey, authAudience, auth
 function buildUseCases({
   store,
   stock,
+  feed,
   dukcapil,
   payment,
   eventBus,
@@ -67,7 +71,9 @@ function buildUseCases({
   // itself) for the default graph below; the parameter is the same function.
   mayAccessBooking: accessGuard
 }) {
+  const queueFeed = createQueueFeedUseCase({ store, feed });
   return {
+    queueFeed,
     events: createEventsUseCase({ store, stock, fees }),
     attendees: createAttendeesUseCase({ store, stock, dukcapil, nikHmacKey, nikEncryptionKey }),
     bookings: createBookingUseCase({
@@ -75,6 +81,7 @@ function buildUseCases({
       stock,
       payment,
       eventBus,
+      queueFeed,
       accounts,
       emailConfig,
       nikEncryptionKey,
@@ -87,8 +94,20 @@ function buildUseCases({
   };
 }
 
-function buildWorkers({ bookingService, config }) {
+function buildWorkers({ bookingService, queueFeed, config }) {
   return {
+    queueFeedWorker: new QueueFeedWorker({
+      queueFeed,
+      syncIntervalMs: config.queueFeedIntervalMs,
+      relayIntervalMs: config.outboxRelayIntervalMs,
+      onError: (job, error) => console.error(`[core] queue feed ${job} error:`, error.message),
+      onRun: (job, result) => {
+        if (job === 'relay' && result > 0) console.info('[core] queue feed relay:', result);
+        if (job === 'sync' && (result.added.length > 0 || result.removed.length > 0)) {
+          console.info('[core] queue feed listing:', JSON.stringify(result));
+        }
+      }
+    }),
     sweeper: new Sweeper({
       bookingService,
       intervalMs: config.sweepIntervalMs,
@@ -115,6 +134,7 @@ function createDefaultDeps(config, overrides = {}) {
   const nikEncryptionKey = resolveEncryptionKey(config.nikEncryptionKey);
   const store = overrides.store || new MemoryStore();
   const stock = overrides.stock || new MemoryStock();
+  const feed = overrides.feed || new MemoryQueueFeed({ counter: (key) => stock.counters?.get(key) });
   const dukcapil =
     overrides.dukcapil || new DukcapilClient({ baseUrl: config.dukcapilUrl, timeoutMs: config.dukcapilTimeoutMs });
   const payment = overrides.payment || new PaymentClient({ baseUrl: config.paymentUrl, serviceKey: config.serviceKey });
@@ -146,6 +166,7 @@ function createDefaultDeps(config, overrides = {}) {
   const useCases = buildUseCases({
     store,
     stock,
+    feed,
     dukcapil,
     payment,
     eventBus,
@@ -169,11 +190,12 @@ function createDefaultDeps(config, overrides = {}) {
       authAudience: config.authAudience,
       authIssuer: config.authIssuer
     });
-  const workers = buildWorkers({ bookingService: useCases.bookings, config });
+  const workers = buildWorkers({ bookingService: useCases.bookings, queueFeed: useCases.queueFeed, config });
   return {
     config,
     store,
     stock,
+    feed,
     dukcapil,
     payment,
     accounts,
@@ -217,13 +239,19 @@ function createDefaultDeps(config, overrides = {}) {
  */
 async function createDeps(config, overrides = {}) {
   const deps = createDefaultDeps(config, overrides);
+  const rebuildWorkers = () =>
+    Object.assign(
+      deps,
+      buildWorkers({ bookingService: deps.useCases.bookings, queueFeed: deps.useCases.queueFeed, config })
+    );
   if (config.databaseUrl && !overrides.store) {
     deps.store = await PgStore.connect(config.databaseUrl);
     deps.useCases = buildUseCases({ ...deps, store: deps.store });
-    deps.sweeper = buildWorkers({ bookingService: deps.useCases.bookings, config }).sweeper;
+    rebuildWorkers();
   }
   if (config.valkeyUrl && !overrides.stock) {
     deps.stock = await RedisStock.connect(config.valkeyUrl);
+    if (!overrides.feed) deps.feed = new RedisQueueFeed(deps.stock.client);
     deps.useCases = buildUseCases({ ...deps, stock: deps.stock });
     deps.auth = buildAuth({
       publicKeys: deps.publicKeys,
@@ -231,16 +259,15 @@ async function createDeps(config, overrides = {}) {
       stock: deps.stock,
       serviceKey: config.serviceKey
     });
-    deps.sweeper = buildWorkers({ bookingService: deps.useCases.bookings, config }).sweeper;
+    rebuildWorkers();
   }
-  if (config.sqsEmptySlotQueueUrl && config.sqsNotificationQueueUrl && !overrides.eventBus) {
+  if (config.sqsNotificationQueueUrl && !overrides.eventBus) {
     deps.eventBus = await SqsEventBus.create({
       region: config.awsRegion,
-      emptySlotQueueUrl: config.sqsEmptySlotQueueUrl,
       notificationQueueUrl: config.sqsNotificationQueueUrl
     });
     deps.useCases = buildUseCases({ ...deps, eventBus: deps.eventBus });
-    deps.sweeper = buildWorkers({ bookingService: deps.useCases.bookings, config }).sweeper;
+    rebuildWorkers();
   }
   return deps;
 }

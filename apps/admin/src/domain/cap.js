@@ -2,8 +2,7 @@
  * CAP domain (CAP final v1, 1 Nov; model event, ADR-0022). Pure
  * functions only — no I/O, no framework, no infrastructure.
  * The CAP lives in the event model (Postgres), never in Valkey;
- * core uses the effective CAP to compute empty slots + publish
- * empty-slot events.
+ * core uses the effective CAP to compute empty slots.
  */
 
 /** CAP tier multipliers (D7): 1x / 3x / 10x total stock. */

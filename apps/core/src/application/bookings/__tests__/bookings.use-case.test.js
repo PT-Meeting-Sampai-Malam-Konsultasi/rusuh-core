@@ -27,11 +27,13 @@ function makeValidationToken() {
   return validationToken;
 }
 
-function buildUseCase({ payment } = {}) {
+function buildUseCase({ payment, logger } = {}) {
   const store = new MemoryStore();
   const stock = new MemoryStock();
   const eventBus = new MemoryEventBus();
+  const queueFeed = { stockChanged: jest.fn(async () => true) };
   const useCase = createBookingUseCase({
+    queueFeed,
     store,
     stock,
     payment: payment || {
@@ -49,9 +51,10 @@ function buildUseCase({ payment } = {}) {
     nikEncryptionKey: NIK_KEY,
     qrKey: 'test-qr-key',
     fees: FEES,
-    mayAccessBooking
+    mayAccessBooking,
+    logger
   });
-  return { store, stock, eventBus, useCase };
+  return { store, stock, eventBus, queueFeed, useCase };
 }
 
 const ACCOUNT = { sub: 'acc_1' };
@@ -134,7 +137,6 @@ describe('booking use case (state transitions)', () => {
     expect((await store.getBooking(booking.bookingId)).status).toBe('EXPIRED');
     expect((await store.getBooking(booking.bookingId)).refundRequired).toBe(true);
     expect(await store.listTicketsByAccount('acc_1')).toHaveLength(0);
-    expect(eventBus.emptySlotEvents).toHaveLength(1); // from the expiry only
     // Expiry enqueued EMAIL_EXPIRED, the late settlement EMAIL_REFUND_FLAGGED
     // (ADR-0009) — both addressed to the buyer's real e-mail (LLD-04 §3).
     expect(eventBus.emailJobs.map((job) => job.type)).toEqual(['EMAIL_EXPIRED', 'EMAIL_REFUND_FLAGGED']);
@@ -454,5 +456,131 @@ describe('booking use case (error paths)', () => {
     const held = await store.getBooking(booking.bookingId);
     const expired = await useCase.expireBooking(held, 'expired');
     expect(expired.status).toBe('EXPIRED');
+  });
+});
+
+describe('booking use case (queue feed, booking.v1 outbox)', () => {
+  const DEVICE = 'w_lCphzERtHxSl8yRoXHcx0g';
+  const QUEUE_ADMISSION = { token: 'adm_q', slotId: 's_q', maxTickets: 3, deviceId: DEVICE };
+  const CALLER = { account: { sub: 'acc_1' }, admission: { token: 'adm_q' } };
+
+  async function held() {
+    const built = buildUseCase();
+    await built.stock.setAdmission(
+      'adm_q',
+      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_q', max_tickets: 3, device_id: DEVICE },
+      60000
+    );
+    const { booking } = await built.useCase.createBooking(ACCOUNT, QUEUE_ADMISSION, createBody(makeValidationToken()));
+    const payment = await built.useCase.enterPayment(booking.bookingId, CALLER);
+    return { ...built, booking, payment };
+  }
+
+  it('keeps the device of the admission on the booking', async () => {
+    const { useCase } = buildUseCase();
+    const { booking } = await useCase.createBooking(ACCOUNT, QUEUE_ADMISSION, createBody(makeValidationToken()));
+    expect(booking.deviceId).toBe(DEVICE);
+  });
+
+  it('reads the device from the admission token when core has none stored (admissions before BR-06-Q1)', async () => {
+    const { useCase } = buildUseCase();
+    const payload = Buffer.from(JSON.stringify({ sub: DEVICE })).toString('base64url');
+    const { booking } = await useCase.createBooking(
+      ACCOUNT,
+      { token: `eyJhbGciOiJFZERTQSJ9.${payload}.c2ln`, slotId: 's_q', maxTickets: 3 },
+      createBody(makeValidationToken())
+    );
+    expect(booking.deviceId).toBe(DEVICE);
+  });
+
+  it('records booking.held with the payment deadline at payment entry, and snapshots the stock', async () => {
+    const { store, queueFeed, booking, payment } = await held();
+    expect(store.outbox).toEqual([
+      {
+        id: expect.any(String),
+        type: 'booking.held',
+        payload: expect.objectContaining({
+          v: 1,
+          type: 'booking.held',
+          eventId: 'evt_2026_gbk',
+          slotId: 's_q',
+          deviceId: DEVICE,
+          bookingId: booking.bookingId,
+          units: 1,
+          paymentDeadline: payment.paymentExpiresAt
+        }),
+        sent: false
+      }
+    ]);
+    expect(store.outbox[0].payload.id).toBe(store.outbox[0].id);
+    expect(queueFeed.stockChanged).toHaveBeenCalledWith('evt_2026_gbk');
+  });
+
+  it('records booking.paid on settlement', async () => {
+    const { store, useCase, booking } = await held();
+    await useCase.confirmPayment(booking.bookingId, {
+      orderId: `${booking.bookingId}-1`,
+      transactionId: 'txn_1',
+      transactionStatus: 'settlement',
+      paymentType: 'gopay',
+      grossAmount: 3548300
+    });
+    expect(store.outbox.map((row) => row.type)).toEqual(['booking.held', 'booking.paid']);
+    expect(store.outbox[1].payload).not.toHaveProperty('paymentDeadline');
+  });
+
+  it('records booking.expired when a held booking expires, and snapshots the released stock', async () => {
+    const { store, queueFeed, useCase, booking } = await held();
+    queueFeed.stockChanged.mockClear();
+    await useCase.expireBooking(await store.getBooking(booking.bookingId), 'expired');
+    expect(store.outbox.map((row) => row.type)).toEqual(['booking.held', 'booking.expired']);
+    expect(queueFeed.stockChanged).toHaveBeenCalledWith('evt_2026_gbk');
+  });
+
+  it('records nothing when a booking expires before payment (the queue never saw a hold)', async () => {
+    const { store, useCase } = buildUseCase();
+    const { booking } = await useCase.createBooking(ACCOUNT, QUEUE_ADMISSION, createBody(makeValidationToken()));
+    await useCase.expireBooking(booking, 'expired');
+    expect(store.outbox).toEqual([]);
+  });
+
+  it('records nothing for a late payment on an expired booking', async () => {
+    const { store, useCase, booking } = await held();
+    await useCase.expireBooking(await store.getBooking(booking.bookingId), 'expired');
+    await useCase.confirmPayment(booking.bookingId, {
+      orderId: `${booking.bookingId}-1`,
+      transactionId: 'txn_late',
+      transactionStatus: 'settlement',
+      paymentType: 'gopay',
+      grossAmount: 3548300
+    });
+    expect(store.outbox.map((row) => row.type)).toEqual(['booking.held', 'booking.expired']);
+  });
+
+  it('still moves the booking when there is no device to report, without an event', async () => {
+    const { store, stock, useCase } = buildUseCase();
+    await stock.setAdmission('adm_1', { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1' }, 60000);
+    const { booking } = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+    await useCase.enterPayment(booking.bookingId, { account: { sub: 'acc_1' }, admission: { token: 'adm_1' } });
+    expect((await store.getBooking(booking.bookingId)).status).toBe('PAYMENT_PENDING');
+    expect(store.outbox).toEqual([]);
+  });
+
+  it('logs a countable error naming the missing field when a booking cannot be reported', async () => {
+    const logger = { error: jest.fn(), warn: jest.fn() };
+    const { stock, useCase } = buildUseCase({ logger });
+    await stock.setAdmission('adm_1', { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1' }, 60000);
+    const { booking } = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+    await useCase.enterPayment(booking.bookingId, { account: { sub: 'acc_1' }, admission: { token: 'adm_1' } });
+    expect(logger.error).toHaveBeenCalledWith(
+      `[core] booking_outbox_skipped type=booking.held booking=${booking.bookingId} event=evt_2026_gbk missing=deviceId`
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('no longer sends empty-slot messages (nothing reads them; the stream replaces them)', async () => {
+    const { eventBus, store, useCase, booking } = await held();
+    await useCase.expireBooking(await store.getBooking(booking.bookingId), 'expired');
+    expect(eventBus.emptySlotEvents).toBeUndefined();
   });
 });
