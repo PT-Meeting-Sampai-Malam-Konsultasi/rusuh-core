@@ -195,6 +195,74 @@ describe('booking use case (state transitions)', () => {
     expect(await store.getBooking(booking.bookingId)).toMatchObject({ status: 'PAID' });
   });
 
+  describe('confirmPayment only acts on settlement or capture', () => {
+    async function heldBooking() {
+      const harness = buildUseCase();
+      await harness.stock.setAdmission(
+        'adm_1',
+        { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1', max_tickets: 3 },
+        60000
+      );
+      const { booking } = await harness.useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+      await harness.useCase.enterPayment(booking.bookingId, {
+        account: { sub: 'acc_1' },
+        admission: { token: 'adm_1' }
+      });
+      return { ...harness, booking };
+    }
+
+    it.each(['deny', 'cancel', 'failure', 'pending', 'expire'])(
+      'does not mark a PAYMENT_PENDING booking as PAID on %s',
+      async (transactionStatus) => {
+        const { store, eventBus, useCase, booking } = await heldBooking();
+        const outboxBefore = store.outbox.length;
+        const emailsBefore = eventBus.emailJobs.length;
+
+        const result = await useCase.confirmPayment(booking.bookingId, {
+          orderId: `${booking.bookingId}-1`,
+          transactionId: 'txn_x',
+          transactionStatus,
+          paymentType: 'gopay',
+          grossAmount: 3548300
+        });
+
+        expect(result).toEqual({ handled: false, reason: 'not_confirmed' });
+        const after = await store.getBooking(booking.bookingId);
+        expect(after.status).toBe('PAYMENT_PENDING');
+        expect(after.tickets || []).toHaveLength(0);
+        expect(store.outbox).toHaveLength(outboxBefore);
+        expect(eventBus.emailJobs).toHaveLength(emailsBefore);
+      }
+    );
+
+    it.each(['settlement', 'capture'])('marks a PAYMENT_PENDING booking as PAID on %s', async (transactionStatus) => {
+      const { store, useCase, booking } = await heldBooking();
+      const result = await useCase.confirmPayment(booking.bookingId, {
+        orderId: `${booking.bookingId}-1`,
+        transactionId: 'txn_ok',
+        transactionStatus,
+        paymentType: 'gopay',
+        grossAmount: 3548300
+      });
+      expect(result.handled).toBe(true);
+      expect((await store.getBooking(booking.bookingId)).status).toBe('PAID');
+    });
+
+    it('keeps the duplicate and late-payment paths unchanged for settlement', async () => {
+      const { useCase, booking } = await heldBooking();
+      const body = {
+        orderId: `${booking.bookingId}-1`,
+        transactionId: 'txn_ok',
+        transactionStatus: 'settlement',
+        paymentType: 'gopay',
+        grossAmount: 3548300
+      };
+      await useCase.confirmPayment(booking.bookingId, body);
+      const duplicate = await useCase.confirmPayment(booking.bookingId, body);
+      expect(duplicate).toMatchObject({ handled: true, duplicate: true });
+    });
+  });
+
   it('createDefaultDeps builds a working graph in test mode', () => {
     const config = loadEnvironment({ NODE_ENV: 'test' });
     const deps = createDefaultDeps(config);

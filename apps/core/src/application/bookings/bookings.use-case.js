@@ -10,6 +10,7 @@ const { MAX_SEATS_PER_NIK, MAX_TICKETS_PER_ORDER } = require('@rusuh/contracts')
 
 const SELECTION_TTL_MS = 5 * 60 * 1000;
 const PAYMENT_TTL_MS = 10 * 60 * 1000;
+const CONFIRMED_PAYMENT_STATUSES = new Set(['settlement', 'capture']);
 
 /**
  * Booking use case (LLD-02 §5–§7, §10–§11).
@@ -471,6 +472,8 @@ function createBookingUseCase({
     async confirmPayment(bookingId, { orderId, transactionId, transactionStatus, paymentType, grossAmount }) {
       const booking = await store.getBooking(bookingId);
       if (!booking) return { handled: false, reason: 'not_found' };
+      // Payment calls this endpoint directly for every confirmed status; only a successful charge may act.
+      if (!CONFIRMED_PAYMENT_STATUSES.has(transactionStatus)) return { handled: false, reason: 'not_confirmed' };
       if (booking.status === 'PAID') return { handled: true, duplicate: true, booking };
       if (booking.status === 'EXPIRED' || booking.status === 'CANCELLED') {
         // Late payment (D11): log + flag for admin review, no resurrection —
