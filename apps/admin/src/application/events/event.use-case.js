@@ -4,7 +4,7 @@ const { CAP_TIERS, effectiveCap, totalStock } = require('@/domain/cap');
 /**
  * Admin event use case (LLD-05 §5.1–§5.2). CAP lives in the event model
  * (Postgres), never in Valkey (model event, ADR-0022); core uses the
- * effective CAP to compute empty slots + publish empty-slot events.
+ * effective CAP to compute empty slots.
  *
  * @param {import('@/domain/ports/store.port').AdminStore} store - Store (events, stats, audit).
  * @param {object} audit - Audit use case.

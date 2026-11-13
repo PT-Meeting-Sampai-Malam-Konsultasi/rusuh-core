@@ -1,6 +1,6 @@
 /**
  * Sweeper (D9): expires bookings past their deadline, releases the hold,
- * enqueues the expired email, and publishes an empty-slot event.
+ * enqueues the expired email, and records booking.expired for the queue (held bookings only).
  * Runs on an interval (~30 s) and on demand (runOnce, used by tests).
  * The bookings use case owns the expiry logic; the sweeper only schedules it.
  */
