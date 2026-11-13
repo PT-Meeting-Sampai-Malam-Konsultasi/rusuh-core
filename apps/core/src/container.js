@@ -148,7 +148,8 @@ function createDefaultDeps(config, overrides = {}) {
   const dukcapil =
     overrides.dukcapil ||
     new DukcapilClient({ baseUrl: config.dukcapilUrl, timeoutMs: config.dukcapilTimeoutMs, logger });
-  const payment = overrides.payment || new PaymentClient({ baseUrl: config.paymentUrl, serviceKey: config.serviceKey });
+  const payment =
+    overrides.payment || new PaymentClient({ baseUrl: config.paymentUrl, serviceKey: config.serviceKey, logger });
   if (payment.isStub) warn('PAYMENT_URL not set: payment client runs in stub mode.');
   const accounts = overrides.accounts || new AuthClient({ baseUrl: config.authUrl, serviceKey: config.serviceKey });
   if (accounts.isStub) warn('AUTH_URL not set: booking e-mails are skipped (no buyer e-mail lookup).');

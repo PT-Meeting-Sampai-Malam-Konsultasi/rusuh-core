@@ -410,12 +410,14 @@ function createBookingUseCase({
             price: line.unitPrice.amount,
             quantity: line.quantity,
             name: line.name
-          }))
+          })),
+          snapStartTime: booking.createdAt
         });
       } catch (error) {
         const retryable = problemError('INTERNAL_ERROR', 'Payment is temporarily unavailable; try again.');
         retryable.status = 503;
         retryable.problem.status = 503;
+        retryable.cause = error;
         throw retryable;
       }
       const updated = await store.updateBooking(bookingId, {

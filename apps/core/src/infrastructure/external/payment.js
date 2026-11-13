@@ -1,16 +1,18 @@
 /**
- * Payment-module internal client (LLD-03 contract, private network).
- *  POST {baseUrl}/internal/snap { bookingId, attempt, orderId, grossAmount, itemDetails }
+ * Payment-module internal client (LLD-03 contract, private network, ADR-0028 prefix).
+ *  POST {baseUrl}/v1/internal/payments/snap { bookingId, attempt, orderId, grossAmount, itemDetails, snapStartTime }
  *    -> { orderId, snapToken, redirectUrl }
- *  GET {baseUrl}/internal/status/{orderId}
+ *  GET {baseUrl}/v1/internal/payments/orders/{orderId}/status
  *    -> { status: 'settlement'|'capture'|'pending'|'deny'|'cancel'|'expire'|'failure',
  *         grossAmount, transactionId, paymentType }
+ *  POST {baseUrl}/v1/internal/payments/orders/{orderId}/expire
+ * Every call carries the shared credential in the x-service-key header.
  * When baseUrl is not configured the client runs in stub mode (local dev):
  * createSnap returns a fake snap token and getStatus returns "pending"
  * unless the caller injected a stub. Stub mode is logged by the caller.
  */
 
-const { createOutboundHeaders } = require('@rusuh/observability');
+const { createOutboundHeaders, reportHttpFailure } = require('@rusuh/observability');
 
 class PaymentClient {
   /**
@@ -19,8 +21,10 @@ class PaymentClient {
    * @param {string} [options.serviceKey] - Shared service credential header.
    * @param {number} [options.timeoutMs] - Per-call timeout (default 5000).
    * @param {Function} [options.fetchImpl] - fetch implementation (tests inject a stub).
+   * @param {object} [options.logger] - Structured logger used to record dependency failures.
    */
-  constructor({ baseUrl, serviceKey, timeoutMs = 5000, fetchImpl = fetch } = {}) {
+  constructor({ baseUrl, serviceKey, timeoutMs = 5000, fetchImpl = fetch, logger } = {}) {
+    this.logger = logger;
     this.baseUrl = baseUrl ? baseUrl.replace(/\/$/, '') : null;
     this.serviceKey = serviceKey || null;
     this.timeoutMs = timeoutMs;
@@ -31,10 +35,28 @@ class PaymentClient {
     return !this.baseUrl;
   }
 
-  async _call(path, { method = 'GET', body } = {}) {
+  /**
+   * Performs one internal HTTP call and records a failure through
+   * reportHttpFailure (allowlisted fields only: no URL, headers or body).
+   *
+   * @param {string} path - Path under the payment base URL.
+   * @param {object} [options]
+   * @param {string} [options.method] - HTTP method (default GET).
+   * @param {object} [options.body] - JSON body.
+   * @param {string} [options.operation] - Safe operation name used in the failure log.
+   * @param {number[]} [options.expectedStatuses] - Non-2xx statuses that are normal outcomes and not logged.
+   * @returns {Promise<object>} Parsed JSON body.
+   * @throws {Error} With `status` set when payment answered non-2xx.
+   */
+  async _call(path, { method = 'GET', body, operation = 'call', expectedStatuses = [] } = {}) {
     if (this.isStub) throw new Error('PaymentClient is in stub mode (no PAYMENT_URL)');
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    let timedOut = false;
+    const startedAt = performance.now();
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, this.timeoutMs);
     try {
       const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
         method,
@@ -50,7 +72,12 @@ class PaymentClient {
         error.status = response.status;
         throw error;
       }
-      return response.json();
+      return await response.json();
+    } catch (error) {
+      if (!expectedStatuses.includes(error.status)) {
+        reportHttpFailure({ logger: this.logger, service: 'payment', operation, error, timedOut, startedAt });
+      }
+      throw error;
     } finally {
       clearTimeout(timeout);
     }
@@ -65,9 +92,10 @@ class PaymentClient {
    * @param {string} input.orderId - {booking_id}-{attempt} (ADR-0008).
    * @param {number} input.grossAmount - Server-side total (IDR).
    * @param {Array} input.itemDetails - Midtrans item_details lines.
+   * @param {string} input.snapStartTime - Booking createdAt (ISO), the payment window origin (LLD-03 §4.1).
    * @returns {Promise<{orderId: string, snapToken: string, redirectUrl: string}>}
    */
-  async createSnap({ bookingId, attempt, orderId, grossAmount, itemDetails }) {
+  async createSnap({ bookingId, attempt, orderId, grossAmount, itemDetails, snapStartTime }) {
     if (this.isStub) {
       return {
         orderId,
@@ -75,9 +103,10 @@ class PaymentClient {
         redirectUrl: `https://pay.rusuh.id/start?order_id=${orderId}`
       };
     }
-    return this._call('/internal/snap', {
+    return this._call('/v1/internal/payments/snap', {
       method: 'POST',
-      body: { bookingId, attempt, orderId, grossAmount, itemDetails }
+      operation: 'createSnap',
+      body: { bookingId, attempt, orderId, grossAmount, itemDetails, snapStartTime }
     });
   }
 
@@ -92,7 +121,10 @@ class PaymentClient {
   async getStatus(orderId) {
     if (this.isStub) return { status: 'pending', grossAmount: 0, transactionId: null, paymentType: null };
     try {
-      return await this._call(`/internal/status/${encodeURIComponent(orderId)}`);
+      return await this._call(`/v1/internal/payments/orders/${encodeURIComponent(orderId)}/status`, {
+        operation: 'getStatus',
+        expectedStatuses: [404]
+      });
     } catch (error) {
       if (error.status === 404) return null;
       throw error;
@@ -108,7 +140,11 @@ class PaymentClient {
   async expire(orderId) {
     if (this.isStub) return;
     try {
-      await this._call(`/internal/expire/${encodeURIComponent(orderId)}`, { method: 'POST' });
+      await this._call(`/v1/internal/payments/orders/${encodeURIComponent(orderId)}/expire`, {
+        method: 'POST',
+        operation: 'expire',
+        expectedStatuses: [412]
+      });
     } catch (error) {
       if (error.status === 412) return;
       throw error;

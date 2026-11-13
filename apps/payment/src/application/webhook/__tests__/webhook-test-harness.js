@@ -70,7 +70,7 @@ async function buildHarness({ getStatusImpl, coreImpl } = {}) {
   const coreClient = {
     notifyPaymentResult: jest.fn(async () => {
       if (coreImpl) return coreImpl();
-      return { bookingStatus: 'PAID', actionTaken: 'paid' };
+      return { handled: true, late: false, duplicate: false, reason: null, actionTaken: undefined };
     })
   };
   const metrics = { increment: jest.fn() };

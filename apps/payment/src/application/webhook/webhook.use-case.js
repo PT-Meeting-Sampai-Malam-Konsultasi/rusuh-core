@@ -1,6 +1,9 @@
 const { verifySignatureKey } = require('@/domain/signature');
 const { parseBookingId, amountEquals, mapOrderStatus, isFinalSuccess } = require('@/domain/payment');
 
+const SUCCESS_STATUSES = new Set(['settlement', 'capture']);
+const ACTIONABLE_REASONS = new Set(['not_found', 'not_held', 'amount_mismatch']);
+
 /**
  * Creates the webhook use case (LLD-03 §5.1, eight validation steps).
  * The ONLY public endpoint of this module. Every webhook is confirmed via
@@ -45,6 +48,32 @@ function createWebhookUseCase({
       }
     }
     throw lastError;
+  }
+
+  /**
+   * Records a deterministic "core did not act" answer (HTTP 200, handled:false).
+   * Retrying cannot change it (LLD-03 §5.2). A successful charge that core could
+   * not apply means the buyer paid without a ticket, so it is logged as error
+   * for manual follow-up; every other combination is a warning.
+   *
+   * @param {Function} log - Webhook logger helper.
+   * @param {object} input - Notification sent to core.
+   * @param {object} result - Parsed core answer.
+   * @returns {void}
+   */
+  function logCoreNotHandled(log, input, result) {
+    const chargeNeedsAttention = SUCCESS_STATUSES.has(input.transactionStatus) && ACTIONABLE_REASONS.has(result.reason);
+    log(
+      ['webhook', 'core-not-handled'],
+      {
+        orderId: input.orderId,
+        bookingId: input.bookingId,
+        transactionStatus: input.transactionStatus,
+        reason: result.reason
+      },
+      'Core did not apply the payment result (handled=false)',
+      chargeNeedsAttention ? 'error' : 'warn'
+    );
   }
 
   return {
@@ -215,6 +244,10 @@ function createWebhookUseCase({
           );
           return { outcome: 'core_callback_failed', httpStatus: 500 };
         }
+        if (result.handled === false) {
+          logCoreNotHandled(log, notifyInput, result);
+          return { outcome: 'core_not_handled', httpStatus: 200 };
+        }
         if (result?.actionTaken === 'paid_after_expiry') {
           // D11 / ADR-0009: booking already EXPIRED, no ticket, refund flag (core).
           log(
@@ -229,8 +262,9 @@ function createWebhookUseCase({
       }
 
       if (confirmedStatus === 'expire') {
+        let expireResult;
         try {
-          await notifyCore(notifyInput);
+          expireResult = await notifyCore(notifyInput);
         } catch (error) {
           metrics?.increment?.('core_callback_failures');
           log(
@@ -240,6 +274,10 @@ function createWebhookUseCase({
             'error'
           );
           return { outcome: 'core_callback_failed', httpStatus: 500 };
+        }
+        if (expireResult.handled === false) {
+          logCoreNotHandled(log, notifyInput, expireResult);
+          return { outcome: 'core_not_handled', httpStatus: 200 };
         }
         return { outcome: 'expired', httpStatus: 200 };
       }
