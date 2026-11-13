@@ -9,6 +9,8 @@
  * tests): getAccount returns null and the e-mail publish step is skipped.
  */
 
+const { createOutboundHeaders } = require('@rusuh/observability');
+
 class AuthClient {
   /**
    * @param {object} options
@@ -34,10 +36,10 @@ class AuthClient {
     try {
       const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
         method: 'GET',
-        headers: {
+        headers: createOutboundHeaders({
           'content-type': 'application/json',
           ...(this.serviceKey ? { 'x-service-key': this.serviceKey } : {})
-        },
+        }),
         signal: controller.signal
       });
       if (!response.ok) {

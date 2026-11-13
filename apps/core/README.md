@@ -27,6 +27,21 @@ optional); when unset it defaults to the production web origins
 dev (`http://localhost:3000`, `http://localhost:5173`). See
 `src/infrastructure/config/environment.js` (`corsOrigins`).
 
+## Observability
+
+Production writes one structured JSON line to stdout per non-health HTTP request.
+`X-Request-ID` accepts only a canonical RFC 4122 UUID and is returned on every
+response; valid legacy `X-Correlation-ID` is accepted only as an input fallback.
+The same canonical value becomes RFC 9457 `traceId` for problem responses.
+
+Terminal request events are `http.request.completed` for `2xx`/`3xx` and expected
+`4xx`, and `http.request.failed` for `5xx`. Expected `4xx` events use
+`outcome: "client_error"`: `401`, `403`, and `429` are `warn`; other `4xx` are
+`info`. This policy is shared so later service migrations do not choose different
+levels. OTel W3C `traceparent` is separate from the request ID. See `.env.example`
+for local no-op and production OTLP trace settings; logs stay on stdout and OTLP
+logs are not enabled.
+
 ## Structure (Onion / Clean Architecture)
 
 Dependencies point inward only; the rule is enforced by

@@ -11,6 +11,8 @@
  * A negative verdict (valid:false) BLOCKS the purchase (gating, 6 Nov item 4).
  */
 
+const { createOutboundHeaders, reportHttpFailure } = require('@rusuh/observability');
+
 const DEFAULT_TIMEOUT_MS = 2000;
 const DEFAULT_FAILURE_THRESHOLD = 3;
 const DEFAULT_COOLDOWN_MS = 30 * 1000;
@@ -29,8 +31,10 @@ class DukcapilClient {
     timeoutMs = DEFAULT_TIMEOUT_MS,
     failureThreshold = DEFAULT_FAILURE_THRESHOLD,
     cooldownMs = DEFAULT_COOLDOWN_MS,
-    fetchImpl = fetch
+    fetchImpl = fetch,
+    logger
   } = {}) {
+    this.logger = logger;
     if (!baseUrl) throw new Error('DukcapilClient requires baseUrl');
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.timeoutMs = timeoutMs;
@@ -77,11 +81,16 @@ class DukcapilClient {
       throw error;
     }
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    let timedOut = false;
+    const startedAt = performance.now();
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, this.timeoutMs);
     try {
       const response = await this.fetchImpl(`${this.baseUrl}/api/v1/verifications`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: createOutboundHeaders({ 'content-type': 'application/json' }),
         body: JSON.stringify({ nik }),
         signal: controller.signal
       });
@@ -91,7 +100,9 @@ class DukcapilClient {
           this._recordSuccess();
           return { valid: false, reason: 'NIK_INVALID' };
         }
-        throw new Error(`Dukcapil responded ${response.status}`);
+        const upstreamError = new Error(`Dukcapil responded ${response.status}`);
+        upstreamError.status = response.status;
+        throw upstreamError;
       }
       const body = await response.json();
       this._recordSuccess();
@@ -99,6 +110,14 @@ class DukcapilClient {
     } catch (error) {
       if (error?.code === 'DUKCAPIL_UNAVAILABLE') throw error;
       this._recordFailure();
+      reportHttpFailure({
+        logger: this.logger,
+        service: 'dukcapil',
+        operation: 'verify',
+        error,
+        timedOut,
+        startedAt
+      });
       const unavailable = new Error('Dukcapil is unavailable; try again.');
       unavailable.code = 'DUKCAPIL_UNAVAILABLE';
       unavailable.status = 503;

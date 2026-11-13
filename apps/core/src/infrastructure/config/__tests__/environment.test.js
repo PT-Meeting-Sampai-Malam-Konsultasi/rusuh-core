@@ -28,4 +28,9 @@ describe('loadEnvironment', () => {
     expect(loadEnvironment({ CORS_ORIGINS: '' }).corsOrigins).toEqual(DEFAULT_CORS_ORIGINS);
     expect(loadEnvironment({ CORS_ORIGINS: '   ' }).corsOrigins).toEqual(DEFAULT_CORS_ORIGINS);
   });
+
+  it('rejects invalid telemetry configuration before server startup', () => {
+    expect(() => loadEnvironment({ OTEL_TRACES_EXPORTER: 'stdout' })).toThrow('Invalid environment configuration');
+    expect(() => loadEnvironment({ OTEL_TRACES_SAMPLER_ARG: '2' })).toThrow('Invalid environment configuration');
+  });
 });

@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { createLogger, instrumentAdapter } = require('@rusuh/observability');
 const { resolveEncryptionKey } = require('@/domain/nik');
 const { createEventsUseCase } = require('@/application/events/events.use-case');
 const { createAttendeesUseCase } = require('@/application/attendees/attendees.use-case');
@@ -129,6 +130,14 @@ function buildWorkers({ bookingService, queueFeed, config }) {
  * @returns {object} Dependency graph.
  */
 function createDefaultDeps(config, overrides = {}) {
+  const logger =
+    overrides.logger ||
+    createLogger({
+      service: 'core',
+      environment: config.nodeEnv,
+      instanceId: config.observability?.serviceInstanceId,
+      format: config.observability?.logFormat
+    });
   const warn = (message) => {
     if (config.nodeEnv !== 'test') console.warn(`[core] ${message}`);
   };
@@ -137,7 +146,8 @@ function createDefaultDeps(config, overrides = {}) {
   const stock = overrides.stock || new MemoryStock();
   const feed = overrides.feed || new MemoryQueueFeed({ counter: (key) => stock.counters?.get(key) });
   const dukcapil =
-    overrides.dukcapil || new DukcapilClient({ baseUrl: config.dukcapilUrl, timeoutMs: config.dukcapilTimeoutMs });
+    overrides.dukcapil ||
+    new DukcapilClient({ baseUrl: config.dukcapilUrl, timeoutMs: config.dukcapilTimeoutMs, logger });
   const payment = overrides.payment || new PaymentClient({ baseUrl: config.paymentUrl, serviceKey: config.serviceKey });
   if (payment.isStub) warn('PAYMENT_URL not set: payment client runs in stub mode.');
   const accounts = overrides.accounts || new AuthClient({ baseUrl: config.authUrl, serviceKey: config.serviceKey });
@@ -196,6 +206,7 @@ function createDefaultDeps(config, overrides = {}) {
   const workers = buildWorkers({ bookingService: useCases.bookings, queueFeed: useCases.queueFeed, config });
   return {
     config,
+    logger,
     store,
     stock,
     feed,
@@ -249,13 +260,18 @@ async function createDeps(config, overrides = {}) {
       buildWorkers({ bookingService: deps.useCases.bookings, queueFeed: deps.useCases.queueFeed, config })
     );
   if (config.databaseUrl && !overrides.store) {
-    deps.store = await PgStore.connect(config.databaseUrl);
+    deps.store = instrumentAdapter(await PgStore.connect(config.databaseUrl), {
+      logger: deps.logger,
+      kind: 'postgres'
+    });
     deps.useCases = buildUseCases({ ...deps, store: deps.store });
     rebuildWorkers();
   }
   if (config.valkeyUrl && !overrides.stock) {
-    deps.stock = await RedisStock.connect(config.valkeyUrl);
-    if (!overrides.feed) deps.feed = new RedisQueueFeed(deps.stock.client);
+    const rawStock = await RedisStock.connect(config.valkeyUrl);
+    if (!overrides.feed)
+      deps.feed = instrumentAdapter(new RedisQueueFeed(rawStock.client), { logger: deps.logger, kind: 'valkey' });
+    deps.stock = instrumentAdapter(rawStock, { logger: deps.logger, kind: 'valkey' });
     deps.useCases = buildUseCases({ ...deps, stock: deps.stock });
     deps.auth = buildAuth({
       publicKeys: deps.publicKeys,
