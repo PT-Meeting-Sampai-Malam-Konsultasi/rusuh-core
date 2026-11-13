@@ -32,6 +32,28 @@ describe('POST /v1/auth/refresh + POST /v1/auth/logout', () => {
     expect(response.body.accessToken).toBeTruthy();
   });
 
+  it('POST /v1/auth/refresh rotates the cookie with the same __Host- attributes', async () => {
+    const session = await loginViaOtp(app, dependencies.mailer, 'hana@example.com');
+    const response = await request(app)
+      .post('/v1/auth/refresh')
+      .set('Cookie', `__Host-rt=${session.refreshToken}`)
+      .send({});
+    const cookie = response.headers['set-cookie'][0];
+    expect(cookie).toMatch(/^__Host-rt=/);
+    expect(cookie).toMatch(/; Path=\/(;|$)/);
+    expect(cookie).toMatch(/; Secure/);
+    expect(cookie).not.toMatch(/Domain=/i);
+  });
+
+  it('POST /v1/auth/logout clears the cookie on the path it was set', async () => {
+    const session = await loginViaOtp(app, dependencies.mailer, 'ines@example.com');
+    const response = await request(app).post('/v1/auth/logout').set('Authorization', `Bearer ${session.accessToken}`);
+    const cookie = response.headers['set-cookie'][0];
+    expect(cookie).toMatch(/^__Host-rt=;/);
+    expect(cookie).toMatch(/; Path=\/(;|$)/);
+    expect(cookie).toMatch(/Expires=Thu, 01 Jan 1970/);
+  });
+
   it('POST /v1/auth/refresh without a token returns 401', async () => {
     const response = await request(app).post('/v1/auth/refresh').send({});
     expect(response.status).toBe(401);

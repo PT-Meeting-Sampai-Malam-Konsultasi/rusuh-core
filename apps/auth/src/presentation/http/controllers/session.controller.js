@@ -1,5 +1,6 @@
 const { apiError } = require('@/application/shared/api-error');
 const { refreshSchema, logoutSchema } = require('../validation/session.validation');
+const { setRefreshCookie, clearRefreshCookie, readRefreshCookie } = require('./refresh-cookie');
 
 /**
  * Creates session controllers (openapi.yaml refreshSession / logout).
@@ -8,7 +9,7 @@ const { refreshSchema, logoutSchema } = require('../validation/session.validatio
  * @returns {object} Controllers.
  */
 function createSessionController(sessionUseCase) {
-  const refreshTokenOf = (request) => request.cookies?.['__Host-rt'] || request.body?.refreshToken || null;
+  const refreshTokenOf = (request) => readRefreshCookie(request) || request.body?.refreshToken || null;
   const deviceIdOf = (request) => request.headers['x-device-id'] || request.body?.deviceId || null;
 
   return {
@@ -22,13 +23,7 @@ function createSessionController(sessionUseCase) {
         });
         response.locals.skipResponseEnvelope = true;
         if (session.refreshToken) {
-          response.cookie('__Host-rt', session.refreshToken, {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'strict',
-            path: '/v1/auth',
-            maxAge: 7 * 24 * 60 * 60 * 1000
-          });
+          setRefreshCookie(response, session.refreshToken);
         }
         response.status(200).json(session);
       } catch (err) {
@@ -46,7 +41,7 @@ function createSessionController(sessionUseCase) {
           refreshToken: refreshTokenOf(request) || value.refreshToken
         });
         response.locals.skipResponseEnvelope = true;
-        response.clearCookie('__Host-rt', { path: '/v1/auth' });
+        clearRefreshCookie(response);
         response.status(204).send();
       } catch (err) {
         next(err);

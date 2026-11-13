@@ -41,14 +41,14 @@ describe('createCors', () => {
   app.use(createCors(['http://localhost:3000']));
   app.get('/ping', (req, res) => res.json({ ok: true }));
 
-  it('answers preflight for an allowed origin without credentials', async () => {
+  it('answers preflight for an allowed origin with credentials', async () => {
     const res = await request(app)
       .options('/ping')
       .set('Origin', 'http://localhost:3000')
       .set('Access-Control-Request-Method', 'GET');
     expect(res.status).toBe(204);
     expect(res.headers['access-control-allow-origin']).toBe('http://localhost:3000');
-    expect(res.headers['access-control-allow-credentials']).toBeUndefined();
+    expect(res.headers['access-control-allow-credentials']).toBe('true');
   });
 
   it('does not echo an origin outside the list', async () => {
@@ -57,6 +57,17 @@ describe('createCors', () => {
       .set('Origin', 'https://evil.example.com')
       .set('Access-Control-Request-Method', 'GET');
     expect(res.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
+  it('never answers an unlisted origin with * or its own origin, credentials or not', async () => {
+    const res = await request(app).get('/ping').set('Origin', 'https://evil.example.com');
+    expect(res.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
+  it('allows credentials on the real request of an allowed origin', async () => {
+    const res = await request(app).get('/ping').set('Origin', 'http://localhost:3000');
+    expect(res.headers['access-control-allow-origin']).toBe('http://localhost:3000');
+    expect(res.headers['access-control-allow-credentials']).toBe('true');
   });
 });
 

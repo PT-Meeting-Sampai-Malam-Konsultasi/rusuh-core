@@ -65,6 +65,19 @@ describe('POST /v1/auth/otp + /v1/auth/otp/verify', () => {
     expect(response.headers['set-cookie'][0]).toMatch(/HttpOnly/);
   });
 
+  it('POST /v1/auth/otp/verify sets a cookie the browser keeps (__Host- rules: Path=/, Secure, no Domain)', async () => {
+    const requested = await request(app).post('/v1/auth/otp').send({ email: 'gita@example.com' });
+    const { code } = dependencies.mailer.sent[0];
+    const response = await request(app)
+      .post('/v1/auth/otp/verify')
+      .send({ challengeId: requested.body.challengeId, code });
+    const cookie = response.headers['set-cookie'][0];
+    expect(cookie).toMatch(/; Path=\/(;|$)/);
+    expect(cookie).toMatch(/; Secure/);
+    expect(cookie).toMatch(/; SameSite=Strict/);
+    expect(cookie).not.toMatch(/Domain=/i);
+  });
+
   it('POST /v1/auth/otp/verify with a wrong code returns 409 WRONG_CODE + attemptsLeft', async () => {
     const requested = await request(app).post('/v1/auth/otp').send({ email: 'eko@example.com' });
     const response = await request(app)
