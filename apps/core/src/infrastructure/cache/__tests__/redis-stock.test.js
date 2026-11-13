@@ -1,4 +1,12 @@
-const { RedisStock, stockKey, nikKey, admissionKey } = require('@/infrastructure/cache/stock');
+const {
+  RedisStock,
+  stockKey,
+  nikKey,
+  admissionKey,
+  LUA_CHECK_AND_HOLD,
+  LUA_RELEASE,
+  LUA_SETTLE
+} = require('@/infrastructure/cache/stock');
 
 /** A fake ioredis client: records calls, returns canned values. */
 function fakeClient(overrides = {}) {
@@ -98,7 +106,11 @@ describe('RedisStock (live Valkey adapter, fake client)', () => {
       code: 'NIK_SEAT_TAKEN',
       nikHmac: 'hmac_1'
     });
-    expect(client.checkAndHold).toHaveBeenCalledWith(JSON.stringify(items), 3, 'evt_1');
+    expect(client.checkAndHold).toHaveBeenCalledWith(
+      JSON.stringify([{ category_id: 'cat_1', nik_hmacs: ['hmac_1'] }]),
+      3,
+      'evt_1'
+    );
   });
 
   it('release and settle call the Lua commands and return ok', async () => {
@@ -107,8 +119,14 @@ describe('RedisStock (live Valkey adapter, fake client)', () => {
     const items = [{ categoryId: 'cat_1', nikHmacs: ['hmac_1'] }];
     await expect(stock.release('evt_1', items)).resolves.toEqual({ ok: true });
     await expect(stock.settle('evt_1', items)).resolves.toEqual({ ok: true });
-    expect(client.releaseHold).toHaveBeenCalledWith(JSON.stringify(items), 'evt_1');
-    expect(client.settleHold).toHaveBeenCalledWith(JSON.stringify(items), 'evt_1');
+    expect(client.releaseHold).toHaveBeenCalledWith(
+      JSON.stringify([{ category_id: 'cat_1', nik_hmacs: ['hmac_1'] }]),
+      'evt_1'
+    );
+    expect(client.settleHold).toHaveBeenCalledWith(
+      JSON.stringify([{ category_id: 'cat_1', nik_hmacs: ['hmac_1'] }]),
+      'evt_1'
+    );
   });
 
   it('stores and reads an admission entry', async () => {
@@ -156,5 +174,24 @@ describe('RedisStock (live Valkey adapter, fake client)', () => {
     const stock = new RedisStock(client);
     await stock.close();
     expect(client.quit).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['checkAndHold', 'checkAndHold'],
+    ['release', 'releaseHold'],
+    ['settle', 'settleHold']
+  ])('%s hands the Lua the item fields it reads (category_id, qty, nik_hmacs)', async (method, command) => {
+    const client = fakeClient();
+    const stock = new RedisStock(client);
+    await stock[method]('evt_1', [{ categoryId: 'cat_1', qty: 2, nikHmacs: ['h1', 'h2'] }]);
+    const call = client.calls.find((c) => c.command === command);
+    expect(JSON.parse(call.args[0])).toEqual([{ category_id: 'cat_1', qty: 2, nik_hmacs: ['h1', 'h2'] }]);
+  });
+
+  it('the Lua scripts read exactly those fields', () => {
+    [LUA_CHECK_AND_HOLD, LUA_RELEASE, LUA_SETTLE].forEach((lua) => {
+      expect(lua).toContain('item.category_id');
+      expect(lua).not.toMatch(/item\.categoryId|item\.nikHmacs/);
+    });
   });
 });
