@@ -1,0 +1,114 @@
+name: deploy
+run-name: deploy ${{ github.ref_name }} (${{ inputs.modules || 'changed' }})
+
+# A release tag deploys only the modules changed since the previous release
+# tag; a change under packages/ or the lockfile deploys every module. Run it
+# by hand on a tag to deploy chosen modules, or an older tag to roll one back.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      modules:
+        description: 'changed | all | comma list of admin,auth,core,notification,officer,payment'
+        type: string
+        default: changed
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      modules: ${{ steps.plan.outputs.modules }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: plan
+        env:
+          WANT: ${{ inputs.modules || 'changed' }}
+        run: |
+          set -euo pipefail
+          all='["admin","auth","core","notification","officer","payment"]'
+          if [[ "$GITHUB_REF_TYPE" != tag ]]; then
+            echo "::error::run this from a release tag, not the branch $GITHUB_REF_NAME"
+            exit 1
+          fi
+          base=n/a
+          case "$WANT" in
+            all)
+              modules=$all
+              ;;
+            changed)
+              base=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "$GITHUB_SHA^" 2>/dev/null || true)
+              if [[ -z "$base" ]]; then
+                modules=$all
+                base='none (first release)'
+              else
+                files=$(git diff --name-only "$base" "$GITHUB_SHA")
+                if grep -qE '^(packages/|package(-lock)?\.json$|\.nvmrc$)' <<<"$files"; then
+                  modules=$all
+                else
+                  modules=$( (grep -oE '^apps/[^/]+/' <<<"$files" || true) | cut -d/ -f2 \
+                    | jq -Rnc --argjson all "$all" '[inputs | select(IN($all[]))] | unique')
+                fi
+              fi
+              ;;
+            *)
+              modules=$(tr ',' '\n' <<<"$WANT" | tr -d ' ' | jq -Rnc '[inputs | select(length > 0)] | unique')
+              unknown=$(jq -r --argjson all "$all" '.[] | select(IN($all[]) | not)' <<<"$modules")
+              if [[ -n "$unknown" ]]; then
+                echo "::error::unknown module(s): $(tr '\n' ' ' <<<"$unknown")"
+                exit 1
+              fi
+              ;;
+          esac
+          echo "modules=$modules" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Deploy plan for \`$GITHUB_REF_NAME\`"
+            echo
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Requested | \`$WANT\` |"
+            echo "| Compared with | \`$base\` |"
+            echo "| Modules | \`$modules\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  verify:
+    needs: plan
+    if: needs.plan.outputs.modules != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        module: ${{ fromJSON(needs.plan.outputs.modules) }}
+    uses: PT-Meeting-Sampai-Malam-Konsultasi/rusuh-infra/.github/workflows/backend-ci.yml@v1
+    permissions:
+      contents: read
+      packages: write
+    with:
+      service: msmk-${{ matrix.module }}
+      runtime: node
+      runtime-version-file: .nvmrc
+      dockerfile: apps/${{ matrix.module }}/Dockerfile
+      context: .
+
+  deploy:
+    needs: [plan, verify]
+    strategy:
+      fail-fast: false
+      matrix:
+        module: ${{ fromJSON(needs.plan.outputs.modules) }}
+    uses: PT-Meeting-Sampai-Malam-Konsultasi/rusuh-infra/.github/workflows/backend-cd.yml@v1
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+    with:
+      service: msmk-${{ matrix.module }}
+      environment: production
+      ecs-service: msmk-prod-${{ matrix.module }}
+      ecs-task-family: msmk-prod-${{ matrix.module }}
+      ecs-container: ${{ matrix.module }}

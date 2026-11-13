@@ -14,7 +14,6 @@ on:
       - '.github/workflows/ci-core.yml**'
   push:
     branches: [main]
-    tags: ['v*']
 
 permissions:
   contents: read
@@ -36,18 +35,3 @@ jobs:
       vuln: npm audit --audit-level=high
       dockerfile: apps/core/Dockerfile
       context: .
-
-  cd:
-    needs: ci
-    if: github.ref_type == 'tag'
-    uses: PT-Meeting-Sampai-Malam-Konsultasi/rusuh-infra/.github/workflows/backend-cd.yml@v1
-    permissions:
-      contents: read
-      packages: read
-      id-token: write
-    with:
-      service: msmk-core
-      environment: production
-      ecs-service: msmk-prod-core
-      ecs-task-family: msmk-prod-core
-      ecs-container: core
