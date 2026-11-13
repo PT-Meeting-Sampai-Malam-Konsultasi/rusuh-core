@@ -9,6 +9,8 @@ const itemDetailSchema = Joi.object({
 
 const createSnapSchema = Joi.object({
   bookingId: Joi.string().required(),
+  attempt: Joi.number().integer().min(1).required(),
+  orderId: Joi.string().required(),
   grossAmount: Joi.number().integer().positive().required(),
   itemDetails: Joi.array().items(itemDetailSchema).min(1).required(),
   customerDetails: Joi.object({

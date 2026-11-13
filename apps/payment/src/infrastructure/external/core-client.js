@@ -1,13 +1,16 @@
 /**
  * Internal client for core-module (LLD-03 §5.3). Core-module is called over the
- * private network with a service credential (mTLS + header, §2) — never with an
- * account JWT. The transport here is plain HTTPS + a service credential header;
- * the exact mechanism (internal ALB vs Cloud Map) is an infra decision (LLD-03
- * §11 item 1). The endpoint path below is the contract this module assumes;
- * core-module implements it (LLD-02 §5).
+ * private network (Service Connect) with the shared service credential in the
+ * x-service-key header — never with an account JWT. mTLS is NOT applied yet;
+ * the credential is the only service-to-service control today.
+ *
+ * Contract (ADR-0028 internal prefix, implemented by core in LLD-02 §5):
+ *   POST {baseUrl}/v1/internal/bookings/{bookingId}/payment-result
+ *   body { orderId, transactionId, transactionStatus, paymentType, grossAmount }
+ *   200 { handled, duplicate?, late?, reason?, ... }
  *
  * notifyPaymentResult is idempotent on the core side (guard status + dedup),
- * so a retry with the same transaction_status yields the same result.
+ * so a retry with the same transactionStatus yields the same result.
  */
 
 class CoreClientError extends Error {
@@ -36,34 +39,29 @@ function createCoreClient({ baseUrl, credential, timeoutMs = 5000, fetchImpl = f
      * Notifies core-module of a confirmed payment result.
      *
      * @param {object} input - Confirmed payment result.
-     * @param {string} input.bookingId - Booking id (prefix of order_id).
+     * @param {string} input.bookingId - Booking id (prefix of orderId), sent in the path.
      * @param {string} input.orderId - Midtrans order_id ({booking_id}-{attempt}).
      * @param {string} input.transactionId - Midtrans transaction id.
      * @param {string} input.transactionStatus - Confirmed Midtrans status.
      * @param {string} [input.paymentType] - Midtrans payment_type.
      * @param {number} input.grossAmount - Confirmed gross amount (IDR).
-     * @returns {Promise<object>} { bookingStatus, actionTaken }.
+     * @returns {Promise<{handled: boolean, late: boolean, duplicate: boolean, reason: string|null, actionTaken: string|undefined}>}
+     *   Only the fields payment needs; the booking body core returns is dropped.
+     * @throws {CoreClientError} On a transport failure, a non-2xx status or a 2xx body that is not a JSON object.
      */
     async notifyPaymentResult({ bookingId, orderId, transactionId, transactionStatus, paymentType, grossAmount }) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       let response;
       try {
-        response = await fetchImpl(`${baseUrl}/internal/payments/notify`, {
+        response = await fetchImpl(`${baseUrl}/v1/internal/bookings/${encodeURIComponent(bookingId)}/payment-result`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Accept: 'application/json',
-            ...(credential ? { 'X-Service-Credential': credential } : {})
+            ...(credential ? { 'x-service-key': credential } : {})
           },
-          body: JSON.stringify({
-            booking_id: bookingId,
-            order_id: orderId,
-            transaction_id: transactionId,
-            transaction_status: transactionStatus,
-            payment_type: paymentType,
-            gross_amount: grossAmount
-          }),
+          body: JSON.stringify({ orderId, transactionId, transactionStatus, paymentType, grossAmount }),
           signal: controller.signal
         });
       } catch (error) {
@@ -72,16 +70,25 @@ function createCoreClient({ baseUrl, credential, timeoutMs = 5000, fetchImpl = f
         clearTimeout(timer);
       }
 
+      if (!response.ok) {
+        throw new CoreClientError(`Core notify responded ${response.status}`, response.status);
+      }
       let data = null;
       try {
         data = await response.json();
       } catch (_error) {
         data = null;
       }
-      if (!response.ok) {
-        throw new CoreClientError(`Core notify responded ${response.status}`, response.status);
+      if (!data || typeof data !== 'object' || typeof data.handled !== 'boolean') {
+        throw new CoreClientError('Core notify returned an unreadable body', response.status);
       }
-      return { bookingStatus: data?.booking_status, actionTaken: data?.action_taken, raw: data };
+      return {
+        handled: data.handled,
+        late: data.late === true,
+        duplicate: data.duplicate === true,
+        reason: typeof data.reason === 'string' ? data.reason : null,
+        actionTaken: data.late === true ? 'paid_after_expiry' : undefined
+      };
     }
   };
 }

@@ -50,7 +50,7 @@ async function buildTestApp({ getStatusImpl, coreImpl, webhookUseCase } = {}) {
   const coreClient = {
     notifyPaymentResult: jest.fn(async () => {
       if (coreImpl) return coreImpl();
-      return { bookingStatus: 'PAID', actionTaken: 'paid' };
+      return { handled: true, late: false, duplicate: false, reason: null };
     })
   };
   const deps = buildPaymentDeps(config, {

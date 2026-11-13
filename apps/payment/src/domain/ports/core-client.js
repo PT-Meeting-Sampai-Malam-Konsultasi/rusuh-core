@@ -16,9 +16,11 @@
  * @property {number} grossAmount - Confirmed gross amount (IDR).
  *
  * @typedef {object} NotifyPaymentResult
- * @property {string} [bookingStatus] - Core booking status after the notify.
- * @property {string} [actionTaken] - Core action (e.g. paid, paid_after_expiry).
- * @property {object} [raw] - Raw core response body.
+ * @property {boolean} handled - False when core deliberately changed nothing (deterministic, never retried).
+ * @property {boolean} late - True when the booking was already EXPIRED/CANCELLED (refund flagged by core).
+ * @property {boolean} duplicate - True when the result was already applied.
+ * @property {string|null} reason - Why core did not act (not_found, not_held, amount_mismatch, not_confirmed).
+ * @property {string} [actionTaken] - 'paid_after_expiry' when late.
  *
  * @typedef {object} CoreClient
  * @property {function(NotifyPaymentResultInput): Promise<NotifyPaymentResult>} notifyPaymentResult

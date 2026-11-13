@@ -47,6 +47,8 @@ describe('createSnapTransaction', () => {
     const { store, service } = buildService({ logger });
     const result = await service.createSnapTransaction({
       bookingId: 'bk_01',
+      attempt: 1,
+      orderId: 'bk_01-1',
       grossAmount: 3000000,
       itemDetails: ITEMS,
       snapStartTime: START_TIME
@@ -67,6 +69,8 @@ describe('createSnapTransaction', () => {
     const { store, service } = buildService();
     await service.createSnapTransaction({
       bookingId: 'bk_01',
+      attempt: 1,
+      orderId: 'bk_01-1',
       grossAmount: 3000000,
       itemDetails: ITEMS,
       snapStartTime: START_TIME
@@ -74,6 +78,8 @@ describe('createSnapTransaction', () => {
     const later = new Date('2026-11-14T03:45:00.000Z');
     const second = await service.createSnapTransaction({
       bookingId: 'bk_01',
+      attempt: 2,
+      orderId: 'bk_01-2',
       grossAmount: 3000000,
       itemDetails: ITEMS,
       snapStartTime: later
@@ -94,6 +100,8 @@ describe('createSnapTransaction', () => {
     await expect(
       service.createSnapTransaction({
         bookingId: 'bk_01',
+        attempt: 1,
+        orderId: 'bk_01-1',
         grossAmount: 3000000,
         itemDetails: ITEMS,
         snapStartTime: START_TIME
@@ -111,10 +119,57 @@ describe('createSnapTransaction', () => {
     await expect(
       service.createSnapTransaction({
         bookingId: 'bk_01',
+        attempt: 1,
+        orderId: 'bk_01-1',
         grossAmount: -5,
         itemDetails: ITEMS,
         snapStartTime: START_TIME
       })
     ).rejects.toMatchObject({ isBoom: true, output: { statusCode: 400 } });
+  });
+
+  it('rejects an orderId that is not {bookingId}-{attempt} and creates no row', async () => {
+    const { store, service } = buildService();
+    await expect(
+      service.createSnapTransaction({
+        bookingId: 'bk_01',
+        attempt: 2,
+        orderId: 'bk_01-1',
+        grossAmount: 3000000,
+        itemDetails: ITEMS,
+        snapStartTime: START_TIME
+      })
+    ).rejects.toMatchObject({ isBoom: true, output: { statusCode: 400 } });
+    expect(await store.getPaymentOrdersByBooking('bk_01')).toHaveLength(0);
+  });
+
+  it('rejects a missing attempt or orderId', async () => {
+    const { service } = buildService();
+    await expect(
+      service.createSnapTransaction({
+        bookingId: 'bk_01',
+        grossAmount: 3000000,
+        itemDetails: ITEMS,
+        snapStartTime: START_TIME
+      })
+    ).rejects.toMatchObject({ isBoom: true, output: { statusCode: 400 } });
+  });
+
+  it('rejects a duplicate orderId with 409 and keeps a single row', async () => {
+    const { store, service } = buildService();
+    const input = {
+      bookingId: 'bk_01',
+      attempt: 1,
+      orderId: 'bk_01-1',
+      grossAmount: 3000000,
+      itemDetails: ITEMS,
+      snapStartTime: START_TIME
+    };
+    await service.createSnapTransaction(input);
+    await expect(service.createSnapTransaction(input)).rejects.toMatchObject({
+      isBoom: true,
+      output: { statusCode: 409 }
+    });
+    expect(await store.getPaymentOrdersByBooking('bk_01')).toHaveLength(1);
   });
 });

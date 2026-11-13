@@ -3,6 +3,9 @@ const { createHealthController } = require('@/presentation/http/controllers/heal
 const { createHealthRouter } = require('@/presentation/http/routes/health.route');
 const { createWebhookController } = require('@/presentation/http/controllers/webhook.controller');
 const { createWebhookRouter, webhookErrorHandler } = require('@/presentation/http/routes/webhook.route');
+const { createInternalController } = require('@/presentation/http/controllers/internal.controller');
+const { createInternalRouter } = require('@/presentation/http/routes/internal.route');
+const { createRequireServiceKey } = require('@/presentation/http/middleware/service-key');
 
 /**
  * Mounts service routers and returns the reusable module dependencies.
@@ -22,11 +25,20 @@ function mountRoutes(app, { config, isReady, deps } = {}) {
   const healthController = createHealthController(healthUseCase);
   app.use(createHealthRouter(healthController));
 
-  // The webhook is the ONLY public endpoint of this module. Internal
+  // The webhook is the ONLY public endpoint of this module. The internal
   // operations (createSnapTransaction, confirmViaGetStatus, expireOrder) are
-  // use-case functions used by core-module over the private network — they are
-  // exposed through the returned deps, not as public routes.
+  // served to core-module under /v1/internal/payments/* (ADR-0028), behind the
+  // service key and unreachable from the internet (ALB blocks /v1/internal/*).
   const paymentDeps = deps;
+  app.use(
+    createInternalRouter(
+      createInternalController({
+        snapUseCase: paymentDeps?.snapUseCase,
+        statusUseCase: paymentDeps?.statusUseCase
+      }),
+      createRequireServiceKey({ serviceKey: config?.core?.serviceCredential })
+    )
+  );
   if (paymentDeps?.webhookUseCase) {
     const webhookController = createWebhookController(paymentDeps.webhookUseCase, {
       bodyLimitBytes: config?.webhookBodyLimitBytes,

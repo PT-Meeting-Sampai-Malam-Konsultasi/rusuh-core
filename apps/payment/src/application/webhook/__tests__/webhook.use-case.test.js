@@ -1,4 +1,5 @@
 const { parseBookingId, amountEquals, mapOrderStatus, isFinalSuccess } = require('@/domain/payment');
+const { createWebhookUseCase } = require('../webhook.use-case');
 const { notification, buildHarness, ORDER_ID, BOOKING_ID } = require('./webhook-test-harness');
 
 describe('webhook pipeline (LLD-03 §5.1)', () => {
@@ -265,7 +266,7 @@ describe('webhook pipeline (LLD-03 §5.1)', () => {
 
   it('late settlement (booking already EXPIRED): PAID_AFTER_EXPIRY, 200, no resurrect', async () => {
     const { service, coreClient } = await buildHarness({
-      coreImpl: async () => ({ bookingStatus: 'EXPIRED', actionTaken: 'paid_after_expiry' })
+      coreImpl: async () => ({ handled: true, late: true, actionTaken: 'paid_after_expiry' })
     });
     const result = await service.processNotification(notification());
     expect(result).toEqual({ outcome: 'paid_after_expiry', httpStatus: 200 });
@@ -335,5 +336,157 @@ describe('webhook helpers', () => {
     expect(isFinalSuccess('capture', 'deny')).toBe(false);
     expect(isFinalSuccess('capture', 'challenge')).toBe(false);
     expect(isFinalSuccess('pending', null)).toBe(false);
+  });
+
+  describe('core answer handling (LLD-03 §5.2 / §5.3)', () => {
+    function chainableLogger() {
+      const logger = {
+        addTags: jest.fn(() => logger),
+        addData: jest.fn(() => logger),
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn()
+      };
+      return logger;
+    }
+
+    async function harnessWith({ coreImpl, status = 'settlement', logger }) {
+      const base = await buildHarness({
+        getStatusImpl: async (orderId) => ({
+          orderId,
+          transactionId: 'tx-1',
+          transactionStatus: status,
+          fraudStatus: 'accept',
+          paymentType: 'qris',
+          grossAmount: '3015000.00',
+          statusCode: '200',
+          currency: 'IDR'
+        }),
+        coreImpl
+      });
+      const service = createWebhookUseCase({
+        store: base.store,
+        statusUseCase: base.statusUseCase,
+        coreClient: base.coreClient,
+        serverKey: 'test-server-key',
+        metrics: base.metrics,
+        logger,
+        sleep: async () => {}
+      });
+      return { ...base, service };
+    }
+
+    it('handled:true: success, 200, one call, nothing logged for it', async () => {
+      const logger = chainableLogger();
+      const { service, coreClient } = await harnessWith({ coreImpl: async () => ({ handled: true }), logger });
+      const result = await service.processNotification(notification());
+      expect(result).toEqual({ outcome: 'settled', httpStatus: 200 });
+      expect(coreClient.notifyPaymentResult).toHaveBeenCalledTimes(1);
+      expect(logger.warn).not.toHaveBeenCalled();
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it('handled:false: 200 to Midtrans, no retry, not treated as a failure', async () => {
+      const logger = chainableLogger();
+      const { service, coreClient, metrics } = await harnessWith({
+        coreImpl: async () => ({ handled: false, reason: 'not_held' }),
+        logger
+      });
+      const result = await service.processNotification(notification());
+      expect(result).toEqual({ outcome: 'core_not_handled', httpStatus: 200 });
+      expect(coreClient.notifyPaymentResult).toHaveBeenCalledTimes(1);
+      expect(metrics.increment).not.toHaveBeenCalledWith('core_callback_failures');
+    });
+
+    it.each(['not_found', 'not_held', 'amount_mismatch'])(
+      'handled:false (%s) on a settlement logs at error level with no credentials',
+      async (reason) => {
+        const logger = chainableLogger();
+        const { service } = await harnessWith({ coreImpl: async () => ({ handled: false, reason }), logger });
+        await service.processNotification(notification());
+        expect(logger.error).toHaveBeenCalledTimes(1);
+        expect(logger.warn).not.toHaveBeenCalled();
+        expect(logger.addData).toHaveBeenCalledWith({
+          orderId: 'bk_01-1',
+          bookingId: 'bk_01',
+          transactionStatus: 'settlement',
+          reason
+        });
+      }
+    );
+
+    it('handled:false (not_confirmed) on a settlement stays at warn level', async () => {
+      const logger = chainableLogger();
+      const { service } = await harnessWith({
+        coreImpl: async () => ({ handled: false, reason: 'not_confirmed' }),
+        logger
+      });
+      await service.processNotification(notification());
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it('handled:false on an expire status logs at warn level and still answers 200', async () => {
+      const logger = chainableLogger();
+      const { service, coreClient } = await harnessWith({
+        status: 'expire',
+        coreImpl: async () => ({ handled: false, reason: 'not_confirmed' }),
+        logger
+      });
+      const result = await service.processNotification(notification({ transaction_status: 'expire' }));
+      expect(result).toEqual({ outcome: 'core_not_handled', httpStatus: 200 });
+      expect(coreClient.notifyPaymentResult).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it.each([401, 404, 500])(
+      'core non-2xx (%i): retries 3 times then answers 500 and logs an error',
+      async (status) => {
+        const logger = chainableLogger();
+        const { service, coreClient, metrics } = await harnessWith({
+          coreImpl: async () => {
+            const error = new Error(`Core notify responded ${status}`);
+            error.status = status;
+            throw error;
+          },
+          logger
+        });
+        const result = await service.processNotification(notification());
+        expect(result).toEqual({ outcome: 'core_callback_failed', httpStatus: 500 });
+        expect(coreClient.notifyPaymentResult).toHaveBeenCalledTimes(3);
+        expect(metrics.increment).toHaveBeenCalledWith('core_callback_failures');
+        expect(logger.error).toHaveBeenCalledWith('Core callback failed');
+      }
+    );
+
+    it('a timeout counts as a failure: 3 tries, then 500', async () => {
+      const logger = chainableLogger();
+      const { service, coreClient } = await harnessWith({
+        coreImpl: async () => {
+          throw new Error('Core notify failed: aborted');
+        },
+        logger
+      });
+      const result = await service.processNotification(notification());
+      expect(result.httpStatus).toBe(500);
+      expect(coreClient.notifyPaymentResult).toHaveBeenCalledTimes(3);
+    });
+
+    it('recovers when core answers on the second try', async () => {
+      const logger = chainableLogger();
+      let calls = 0;
+      const { service, coreClient } = await harnessWith({
+        coreImpl: async () => {
+          calls += 1;
+          if (calls === 1) throw new Error('Core notify responded 503');
+          return { handled: true };
+        },
+        logger
+      });
+      const result = await service.processNotification(notification());
+      expect(result).toEqual({ outcome: 'settled', httpStatus: 200 });
+      expect(coreClient.notifyPaymentResult).toHaveBeenCalledTimes(2);
+    });
   });
 });
