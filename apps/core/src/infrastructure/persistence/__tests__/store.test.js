@@ -134,3 +134,86 @@ describe('MemoryStore', () => {
     expect(await store.nextTicketSeq('evt_2026_gbk', 'cat_festival_b')).toBe(1);
   });
 });
+
+describe('MemoryStore booking outbox (booking.v1, ADR-0013)', () => {
+  let store;
+  const outbox = { id: 'ob_1', type: 'booking.held', payload: { id: 'ob_1', type: 'booking.held' } };
+
+  beforeEach(async () => {
+    store = new MemoryStore();
+    await store.createBooking({
+      bookingId: 'bk_1',
+      orderCode: 'RSH-26-000001',
+      eventId: 'evt_2026_gbk',
+      accountId: 'acc_1',
+      admissionToken: 'adm_1',
+      slotId: 's_1',
+      deviceId: 'w_lCphzERtHxSl8yRoXHcx0g',
+      status: 'SELECTION',
+      expiresAt: new Date(Date.now() + 300000).toISOString(),
+      price: { total: { amount: 100, currency: 'IDR' } },
+      attendees: [],
+      tickets: []
+    });
+  });
+
+  it('keeps the device of the admission on the booking', async () => {
+    expect((await store.getBooking('bk_1')).deviceId).toBe('w_lCphzERtHxSl8yRoXHcx0g');
+  });
+
+  it('records the event only when the transition happens', async () => {
+    await store.updateBookingStatus('bk_1', 'SELECTION', 'PAYMENT_PENDING', {}, outbox);
+    await store.updateBookingStatus('bk_1', 'SELECTION', 'PAYMENT_PENDING', {}, { ...outbox, id: 'ob_2' });
+    const sent = [];
+    expect(await store.relayOutbox(10, async (row) => sent.push(row))).toBe(1);
+    expect(sent).toEqual([outbox]);
+  });
+
+  it('sends each event once, in order', async () => {
+    await store.updateBookingStatus('bk_1', 'SELECTION', 'PAYMENT_PENDING', {}, outbox);
+    await store.updateBookingStatus(
+      'bk_1',
+      'PAYMENT_PENDING',
+      'PAID',
+      {},
+      { ...outbox, id: 'ob_2', type: 'booking.paid' }
+    );
+    const sent = [];
+    await store.relayOutbox(10, async (row) => sent.push(row.id));
+    await store.relayOutbox(10, async (row) => sent.push(row.id));
+    expect(sent).toEqual(['ob_1', 'ob_2']);
+  });
+
+  it('keeps an event whose send failed, and the ones after it, for the next run', async () => {
+    await store.updateBookingStatus('bk_1', 'SELECTION', 'PAYMENT_PENDING', {}, outbox);
+    await store.updateBookingStatus(
+      'bk_1',
+      'PAYMENT_PENDING',
+      'PAID',
+      {},
+      { ...outbox, id: 'ob_2', type: 'booking.paid' }
+    );
+    await expect(
+      store.relayOutbox(10, async () => {
+        throw new Error('valkey down');
+      })
+    ).rejects.toThrow('valkey down');
+    const sent = [];
+    expect(await store.relayOutbox(10, async (row) => sent.push(row.id))).toBe(2);
+    expect(sent).toEqual(['ob_1', 'ob_2']);
+  });
+
+  it('sends at most the limit per run', async () => {
+    await store.updateBookingStatus('bk_1', 'SELECTION', 'PAYMENT_PENDING', {}, outbox);
+    await store.updateBookingStatus(
+      'bk_1',
+      'PAYMENT_PENDING',
+      'PAID',
+      {},
+      { ...outbox, id: 'ob_2', type: 'booking.paid' }
+    );
+    expect(await store.relayOutbox(1, async () => {})).toBe(1);
+    expect(await store.relayOutbox(1, async () => {})).toBe(1);
+    expect(await store.relayOutbox(1, async () => {})).toBe(0);
+  });
+});

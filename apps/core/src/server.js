@@ -25,6 +25,7 @@ async function startServer() {
 
   // Background worker (D9 sweeper).
   deps.sweeper.start();
+  deps.queueFeedWorker.start();
 
   /**
    * Stops accepting connections and exits after cleanup or the configured deadline.
@@ -40,6 +41,7 @@ async function startServer() {
     logger?.addTags?.(['server', 'shutdown'])?.addData?.({ signal })?.info?.('Graceful shutdown started');
 
     deps.sweeper.stop();
+    deps.queueFeedWorker.stop();
     Promise.all([deps.store.close(), deps.stock.close()]).catch(() => {});
 
     const timeout = setTimeout(() => process.exit(1), config.gracefulShutdownTimeoutMs);

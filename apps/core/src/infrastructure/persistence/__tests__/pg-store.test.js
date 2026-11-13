@@ -342,4 +342,106 @@ describe('PgStore (live Postgres adapter, fake Pool)', () => {
     await store.close();
     expect(pool.end).toHaveBeenCalledTimes(1);
   });
+
+  it('createBooking stores the device of the admission', async () => {
+    const pool = fakePool({
+      queryImpl: async () => ({ rows: [{ ...BOOKING_ROW, device_id: 'w_lCphzERtHxSl8yRoXHcx0g' }] })
+    });
+    const store = new PgStore(pool);
+    const created = await store.createBooking({
+      bookingId: 'bk_1',
+      eventId: 'evt_1',
+      accountId: 'acc_1',
+      admissionToken: 'adm_1',
+      slotId: 's_1',
+      deviceId: 'w_lCphzERtHxSl8yRoXHcx0g',
+      status: 'SELECTION',
+      expiresAt: '2026-11-07T10:05:00.000Z',
+      orderCode: 'RSH-26-000001',
+      price: {},
+      attendees: []
+    });
+    const client = await pool.connect.mock.results[0].value;
+    const insert = client.queries.find((q) => q.text.includes('INSERT INTO bookings'));
+    expect(insert.text).toContain('device_id');
+    expect(insert.params).toContain('w_lCphzERtHxSl8yRoXHcx0g');
+    expect(created.deviceId).toBe('w_lCphzERtHxSl8yRoXHcx0g');
+  });
+
+  it('updateBookingStatus writes the outbox row in the same statement as the transition', async () => {
+    const pool = fakePool({ queryImpl: async () => ({ rows: [BOOKING_ROW] }) });
+    const store = new PgStore(pool);
+    const payload = { id: 'ob_1', type: 'booking.held' };
+    await store.updateBookingStatus(
+      'bk_1',
+      'SELECTION',
+      'PAYMENT_PENDING',
+      {},
+      { id: 'ob_1', type: 'booking.held', payload }
+    );
+    expect(pool.query).toHaveBeenCalledTimes(1);
+    const [text, params] = pool.query.mock.calls[0];
+    expect(text).toMatch(/^WITH moved AS \(UPDATE bookings SET .* RETURNING \*\)/s);
+    expect(text).toContain('INSERT INTO booking_outbox (id, type, booking_id, payload)');
+    expect(text).toContain('FROM moved');
+    expect(text).toContain('SELECT * FROM moved');
+    expect(params).toEqual(['bk_1', 'PAYMENT_PENDING', ['SELECTION'], 'ob_1', 'booking.held', JSON.stringify(payload)]);
+  });
+
+  it('relayOutbox locks unsent rows, sends them in order and marks the sent ones', async () => {
+    const rows = [
+      { id: 'ob_1', type: 'booking.held', payload: { id: 'ob_1' } },
+      { id: 'ob_2', type: 'booking.paid', payload: { id: 'ob_2' } }
+    ];
+    const client = fakeClient({
+      queryImpl: async (text) => (text.startsWith('SELECT') ? { rows } : { rows: [] })
+    });
+    const pool = { connect: jest.fn(async () => client) };
+    const store = new PgStore(pool);
+    const sent = [];
+    expect(await store.relayOutbox(100, async (row) => sent.push(row.id))).toBe(2);
+    expect(sent).toEqual(['ob_1', 'ob_2']);
+    const texts = client.queries.map((q) => q.text);
+    expect(texts[0]).toBe('BEGIN');
+    expect(texts[1]).toContain('WHERE sent_at IS NULL ORDER BY created_at, id LIMIT $1 FOR UPDATE SKIP LOCKED');
+    expect(client.queries[1].params).toEqual([100]);
+    expect(texts[2]).toContain('UPDATE booking_outbox SET sent_at = NOW() WHERE id = ANY($1)');
+    expect(client.queries[2].params).toEqual([['ob_1', 'ob_2']]);
+    expect(texts[3]).toBe('COMMIT');
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it('relayOutbox marks only the rows sent before a failure, commits them and rethrows', async () => {
+    const rows = [
+      { id: 'ob_1', type: 'booking.held', payload: { id: 'ob_1' } },
+      { id: 'ob_2', type: 'booking.paid', payload: { id: 'ob_2' } }
+    ];
+    const client = fakeClient({
+      queryImpl: async (text) => (text.startsWith('SELECT') ? { rows } : { rows: [] })
+    });
+    const store = new PgStore({ connect: jest.fn(async () => client) });
+    let calls = 0;
+    await expect(
+      store.relayOutbox(100, async () => {
+        calls += 1;
+        if (calls === 2) throw new Error('valkey down');
+      })
+    ).rejects.toThrow('valkey down');
+    const mark = client.queries.find((q) => q.text.startsWith('UPDATE booking_outbox'));
+    expect(mark.params).toEqual([['ob_1']]);
+    expect(client.queries.at(-1).text).toBe('COMMIT');
+  });
+
+  it('relayOutbox rolls back when the outbox cannot be read', async () => {
+    const client = fakeClient({
+      queryImpl: async (text) => {
+        if (text.startsWith('SELECT')) throw new Error('db down');
+        return { rows: [] };
+      }
+    });
+    const store = new PgStore({ connect: jest.fn(async () => client) });
+    await expect(store.relayOutbox(100, async () => {})).rejects.toThrow('db down');
+    expect(client.queries.at(-1).text).toBe('ROLLBACK');
+    expect(client.release).toHaveBeenCalled();
+  });
 });

@@ -141,7 +141,7 @@ describe('bookings journey (D5)', () => {
     expect(response.body.code).toBe('BOOKING_NOT_HELD');
   });
 
-  it('expires a due booking via the sweeper (empty-slot + expired email)', async () => {
+  it('expires a due booking via the sweeper (booking.expired + expired email)', async () => {
     const { app, admissionToken, accountToken, deps } = await createTestApp();
     const headers = { Authorization: `Bearer ${accountToken}`, 'X-Admission-Token': admissionToken };
     const validationToken = await validateAttendee(app, headers);
@@ -157,9 +157,8 @@ describe('bookings journey (D5)', () => {
     expect((await deps.store.getBooking(bookingId)).status).toBe('EXPIRED');
     // The hold was released back to available.
     expect(await deps.stock.getAvailable('evt_2026_gbk', 'cat_festival_b')).toBe(8000);
-    // An empty-slot event was published and an expired email enqueued.
-    expect(deps.eventBus.emptySlotEvents).toHaveLength(1);
-    expect(deps.eventBus.emptySlotEvents[0].reason).toBe('expired');
+    // The queue hears of the hold and the expiry (booking.v1 outbox), and the buyer gets the expired email.
+    expect(deps.store.outbox.map((row) => row.type)).toEqual(['booking.held', 'booking.expired']);
     expect(deps.eventBus.emailJobs).toHaveLength(1);
     expect(deps.eventBus.emailJobs[0].type).toBe('EMAIL_EXPIRED');
   });

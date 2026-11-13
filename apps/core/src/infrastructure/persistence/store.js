@@ -90,6 +90,7 @@ class MemoryStore {
     this.emailLog = new Set(); // `${bookingId}:${type}`
     this.activeByAdmission = new Map(); // admissionToken -> bookingId
     this.activeByAccountEvent = new Map(); // `${accountId}:${eventId}` -> bookingId
+    this.outbox = []; // { id, type, payload, sent }
     if (seed) {
       const { event, categories } = seedData();
       this.events.set(event.eventId, event);
@@ -155,18 +156,35 @@ class MemoryStore {
    * Guarded status transition (UPDATE ... WHERE status = fromStatus).
    * Returns the updated booking, or null when the guard failed (0 rows).
    */
-  async updateBookingStatus(bookingId, fromStatus, toStatus, patch = {}) {
+  async updateBookingStatus(bookingId, fromStatus, toStatus, patch = {}, outbox = null) {
     const booking = this.bookings.get(bookingId);
     if (!booking) return null;
     const from = Array.isArray(fromStatus) ? fromStatus : [fromStatus];
     if (!from.includes(booking.status)) return null;
     const updated = { ...booking, ...patch, status: toStatus, updatedAt: nowIso() };
     this.bookings.set(bookingId, updated);
+    if (outbox) this.outbox.push({ ...outbox, sent: false });
     if (toStatus !== 'SELECTION' && toStatus !== 'PAYMENT_PENDING') {
       this.activeByAdmission.delete(updated.admissionToken);
       this.activeByAccountEvent.delete(`${updated.accountId}:${updated.eventId}`);
     }
     return { ...updated };
+  }
+
+  /**
+   * Sends unsent outbox rows in order through send(row). A failed send stops
+   * the run; that row and the ones after it stay for the next run.
+   */
+  async relayOutbox(limit, send) {
+    const due = this.outbox.filter((row) => !row.sent).slice(0, limit);
+    const sendNext = async (index) => {
+      if (index >= due.length) return index;
+      const { sent: _sent, ...row } = due[index];
+      await send(row);
+      due[index].sent = true;
+      return sendNext(index + 1);
+    };
+    return sendNext(0);
   }
 
   async updateBooking(bookingId, patch) {
@@ -315,8 +333,8 @@ class PgStore {
     try {
       await client.query('BEGIN');
       const { rows } = await client.query(
-        `INSERT INTO bookings (booking_id, event_id, account_id, admission_token, slot_id, status, expires_at, payment_expires_at, order_code, price, attendees, snap_token)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+        `INSERT INTO bookings (booking_id, event_id, account_id, admission_token, slot_id, status, expires_at, payment_expires_at, order_code, price, attendees, snap_token, device_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
         [
           booking.bookingId,
           booking.eventId,
@@ -329,7 +347,8 @@ class PgStore {
           booking.orderCode,
           JSON.stringify(booking.price),
           JSON.stringify(booking.attendees),
-          booking.snapToken || null
+          booking.snapToken || null,
+          booking.deviceId || null
         ]
       );
       await client.query('COMMIT');
@@ -371,7 +390,7 @@ class PgStore {
     return rows.map((row) => this._rowToBooking(row));
   }
 
-  async updateBookingStatus(bookingId, fromStatus, toStatus, patch = {}) {
+  async updateBookingStatus(bookingId, fromStatus, toStatus, patch = {}, outbox = null) {
     const from = Array.isArray(fromStatus) ? fromStatus : [fromStatus];
     const sets = ['status = $2', 'updated_at = NOW()'];
     const values = [bookingId, toStatus];
@@ -406,11 +425,61 @@ class PgStore {
       values.push(JSON.stringify(patch.tickets));
       idx += 1;
     }
+    const update = `UPDATE bookings SET ${sets.join(', ')} WHERE booking_id = $1 AND status = ANY($${idx}) RETURNING *`;
+    if (!outbox) {
+      const { rows } = await this.pool.query(update, [...values, from]);
+      return rows[0] ? this._rowToBooking(rows[0]) : null;
+    }
+    // One statement: the outbox row exists exactly when the transition happened.
     const { rows } = await this.pool.query(
-      `UPDATE bookings SET ${sets.join(', ')} WHERE booking_id = $1 AND status = ANY($${idx}) RETURNING *`,
-      [...values, from]
+      `WITH moved AS (${update})
+       , queued AS (INSERT INTO booking_outbox (id, type, booking_id, payload)
+           SELECT $${idx + 1}, $${idx + 2}, booking_id, $${idx + 3}::jsonb FROM moved)
+       SELECT * FROM moved`,
+      [...values, from, outbox.id, outbox.type, JSON.stringify(outbox.payload)]
     );
     return rows[0] ? this._rowToBooking(rows[0]) : null;
+  }
+
+  /**
+   * Sends unsent outbox rows in order through send(row), under row locks so
+   * two core tasks never relay the same row at once. A failed send stops the
+   * run; the rows sent before it are marked, the rest stay for the next run.
+   */
+  async relayOutbox(limit, send) {
+    const client = await this.pool.connect();
+    let committed = false;
+    try {
+      await client.query('BEGIN');
+      const { rows } = await client.query(
+        'SELECT id, type, payload FROM booking_outbox WHERE sent_at IS NULL ORDER BY created_at, id LIMIT $1 FOR UPDATE SKIP LOCKED',
+        [limit]
+      );
+      const sent = [];
+      let failure = null;
+      await rows.reduce(async (previous, row) => {
+        await previous;
+        if (failure) return;
+        try {
+          await send(row);
+          sent.push(row.id);
+        } catch (error) {
+          failure = error;
+        }
+      }, Promise.resolve());
+      if (sent.length > 0) {
+        await client.query('UPDATE booking_outbox SET sent_at = NOW() WHERE id = ANY($1)', [sent]);
+      }
+      await client.query('COMMIT');
+      committed = true;
+      if (failure) throw failure;
+      return sent.length;
+    } catch (error) {
+      if (!committed) await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async updateBooking(bookingId, patch) {
@@ -549,6 +618,7 @@ class PgStore {
       accountId: row.account_id,
       admissionToken: row.admission_token,
       slotId: row.slot_id,
+      deviceId: row.device_id || null,
       status: row.status,
       expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
       paymentExpiresAt: row.payment_expires_at ? new Date(row.payment_expires_at).toISOString() : null,

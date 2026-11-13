@@ -51,7 +51,7 @@ function createRequireAccount({ verify, publicKeys, isDenied, expectedAud, expec
  * time the user opens Detail; the lookup is still retried briefly (~3 s,
  * ~200 ms interval) as a defensive measure against transient Valkey lag
  * before 403 ADMISSION_INVALID.
- * Attaches req.admission = { token, userId, eventId, slotId, maxTickets, expiresAt }.
+ * Attaches req.admission = { token, userId, eventId, slotId, deviceId, maxTickets, expiresAt }.
  *
  * @param {object} deps
  * @param {object} deps.stock - Stock adapter (getAdmission).
@@ -111,6 +111,7 @@ function createRequireAdmission({ stock, retryMs = 3000, retryIntervalMs = 200 }
         userId: entry.user_id,
         eventId: entry.event_id,
         slotId: entry.slot_id || null,
+        deviceId: entry.device_id || null,
         maxTickets: entry.max_tickets || 3,
         expiresAt: entry.expires_at
       };

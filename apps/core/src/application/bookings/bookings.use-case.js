@@ -5,6 +5,7 @@ const { encryptNik } = require('@/domain/nik');
 const { verifyValidationToken } = require('@/domain/validation-token');
 const { serverNow } = require('@/domain/presenters');
 const { buildTicketEnvelope, buildExpiredEnvelope, buildRefundFlaggedEnvelope } = require('@/domain/email-envelope');
+const { bookingEvent, deviceIdFromAdmissionToken } = require('@/domain/queue-feed');
 const { MAX_SEATS_PER_NIK, MAX_TICKETS_PER_ORDER } = require('@rusuh/contracts').constants;
 
 const SELECTION_TTL_MS = 5 * 60 * 1000;
@@ -19,7 +20,9 @@ const PAYMENT_TTL_MS = 10 * 60 * 1000;
  * @param {object} deps.store - StorePort (durable store: bookings, tickets, nik backstop).
  * @param {object} deps.stock - StockPort (live stock adapter: Lua hold/release/settle, admission).
  * @param {object} deps.payment - PaymentPort (payment-module internal client).
- * @param {object} deps.eventBus - EventBusPort (empty-slot, email jobs).
+ * @param {object} deps.eventBus - EventBusPort (email jobs).
+ * @param {object} deps.queueFeed - Queue feed use case (stockChanged after a hold,
+ *   release or settle). Booking events reach the queue through the outbox.
  * @param {object} deps.accounts - AuthPort (getAccount: buyer e-mail + locale
  *   for the e-mail envelopes, LLD-04 §3 `to` = account e-mail).
  * @param {object} deps.emailConfig - E-mail link/label config ({ webBaseUrl,
@@ -37,6 +40,7 @@ function createBookingUseCase({
   stock,
   payment,
   eventBus,
+  queueFeed,
   accounts,
   emailConfig,
   nikEncryptionKey,
@@ -49,6 +53,9 @@ function createBookingUseCase({
   }
   if (!accounts || typeof accounts.getAccount !== 'function') {
     throw new Error('createBookingUseCase requires accounts (auth-module client, injected by the container)');
+  }
+  if (!queueFeed || typeof queueFeed.stockChanged !== 'function') {
+    throw new Error('createBookingUseCase requires queueFeed (injected by the container)');
   }
   function luaItems(booking) {
     // Group tickets by category; collect the NIK HMACs per category.
@@ -74,13 +81,18 @@ function createBookingUseCase({
     await stock.settle(booking.eventId, luaItems(booking));
   }
 
-  async function publishEmptySlot(booking, reason) {
-    return eventBus.publishEmptySlot({
-      event_id: booking.eventId,
-      released: booking.attendees.length,
-      released_ids: [booking.bookingId],
-      reason
-    });
+  /**
+   * The booking.v1 event for the outbox, written with the status change. A
+   * booking without a device (no BR-06-Q1 admission) cannot be reported; the
+   * queue still sees its stock through the snapshots.
+   */
+  function outboxFor(type, booking) {
+    const payload = bookingEvent(type, booking, new Date());
+    if (!payload) {
+      console.warn(`[core] ${type} for booking ${booking.bookingId} not sent to the queue: no device or slot`);
+      return null;
+    }
+    return { id: payload.id, type, payload };
   }
 
   /**
@@ -261,6 +273,7 @@ function createBookingUseCase({
         accountId: account.sub,
         admissionToken: admission.token,
         slotId: admission.slotId || null,
+        deviceId: admission.deviceId || deviceIdFromAdmissionToken(admission.token),
         status: 'SELECTION',
         expiresAt: new Date(now + SELECTION_TTL_MS).toISOString(),
         paymentExpiresAt: null,
@@ -360,15 +373,19 @@ function createBookingUseCase({
       // DB: SELECTION -> PAYMENT_PENDING (guarded) + nik backstop + attempt.
       const attempt = (booking.attempt || 0) + 1;
       const paymentExpiresAt = new Date(Date.now() + PAYMENT_TTL_MS).toISOString();
-      const transitioned = await store.updateBookingStatus(bookingId, 'SELECTION', 'PAYMENT_PENDING', {
-        paymentExpiresAt,
-        attempt
-      });
+      const transitioned = await store.updateBookingStatus(
+        bookingId,
+        'SELECTION',
+        'PAYMENT_PENDING',
+        { paymentExpiresAt, attempt },
+        outboxFor('booking.held', { ...booking, paymentExpiresAt })
+      );
       if (!transitioned) {
         // Someone else transitioned it meanwhile: release the hold we just made.
         await releaseHold(booking);
         throw problemError('BOOKING_NOT_HELD', 'The booking is paid, expired or cancelled.');
       }
+      await queueFeed.stockChanged(booking.eventId);
       await Promise.all(
         booking.attendees.map((attendee) => store.incrementNikBackstop(booking.eventId, attendee.nikHmac, 1))
       );
@@ -436,7 +453,7 @@ function createBookingUseCase({
         return result.booking || booking;
       }
       if (status.status === 'expire') {
-        const expired = await this.expireBooking(booking, 'expired');
+        const expired = await this.expireBooking(booking);
         return expired || booking;
       }
       return booking; // pending / deny / cancel / failure: booking stays as-is
@@ -475,17 +492,19 @@ function createBookingUseCase({
       }
 
       // Guard: only PAYMENT_PENDING -> PAID (0 rows = already transitioned).
-      const paid = await store.updateBookingStatus(bookingId, 'PAYMENT_PENDING', 'PAID', {
-        paidAt: new Date().toISOString(),
-        paymentMethod: paymentType || null
-      });
+      const paid = await store.updateBookingStatus(
+        bookingId,
+        'PAYMENT_PENDING',
+        'PAID',
+        { paidAt: new Date().toISOString(), paymentMethod: paymentType || null },
+        outboxFor('booking.paid', booking)
+      );
       if (!paid) return { handled: true, duplicate: true, booking: await store.getBooking(bookingId) };
 
       // Mint public ticket codes (D19) + settle the hold (held -> sold).
       const minted = await mintTickets(paid);
       const withTickets = await store.updateBooking(bookingId, { tickets: minted });
       await settleHold(paid);
-      await publishEmptySlot(paid, 'purchase_complete');
       await enqueueBookingEmail(withTickets, (account, event, links) =>
         buildTicketEnvelope({ account, booking: withTickets, event, tickets: minted, links })
       );
@@ -493,17 +512,20 @@ function createBookingUseCase({
     },
 
     /**
-     * Expires one booking (sweeper / Get Status expire). Guarded; releases the
-     * hold (PAYMENT_PENDING only), enqueues the expired email, publishes an
-     * empty-slot event. Returns the expired booking or null (already moved).
+     * Expires one booking (sweeper / Get Status expire). Guarded; for a held
+     * booking (PAYMENT_PENDING) it records booking.expired, releases the hold
+     * and enqueues the expired email. Returns the expired booking or null
+     * (already moved).
      */
-    async expireBooking(booking, reason = 'expired') {
+    async expireBooking(booking) {
       const from = booking.status;
       if (from !== 'SELECTION' && from !== 'PAYMENT_PENDING') return null;
-      const expired = await store.updateBookingStatus(booking.bookingId, from, 'EXPIRED', {});
+      const outbox = from === 'PAYMENT_PENDING' ? outboxFor('booking.expired', booking) : null;
+      const expired = await store.updateBookingStatus(booking.bookingId, from, 'EXPIRED', {}, outbox);
       if (!expired) return null;
       if (from === 'PAYMENT_PENDING') {
         await releaseHold(expired);
+        await queueFeed.stockChanged(expired.eventId);
         await Promise.all(
           expired.attendees.map((attendee) => store.incrementNikBackstop(expired.eventId, attendee.nikHmac, -1))
         );
@@ -516,7 +538,6 @@ function createBookingUseCase({
         await enqueueBookingEmail(expired, (account, event, links) =>
           buildExpiredEnvelope({ account, booking: expired, event, links })
         );
-        await publishEmptySlot(expired, reason);
       }
       return expired;
     },
@@ -527,7 +548,7 @@ function createBookingUseCase({
      */
     async expireDue(now = new Date()) {
       const due = await store.listDueBookings(now.toISOString(), 100);
-      const results = await Promise.all(due.map((booking) => this.expireBooking(booking, 'expired')));
+      const results = await Promise.all(due.map((booking) => this.expireBooking(booking)));
       return {
         processed: results.filter(Boolean).length,
         skipped: results.filter((result) => !result).length
