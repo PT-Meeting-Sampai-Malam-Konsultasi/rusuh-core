@@ -5,7 +5,7 @@ const { encryptNik } = require('@/domain/nik');
 const { verifyValidationToken } = require('@/domain/validation-token');
 const { serverNow } = require('@/domain/presenters');
 const { buildTicketEnvelope, buildExpiredEnvelope, buildRefundFlaggedEnvelope } = require('@/domain/email-envelope');
-const { bookingEvent, deviceIdFromAdmissionToken } = require('@/domain/queue-feed');
+const { bookingEvent, bookingEventGap, deviceIdFromAdmissionToken } = require('@/domain/queue-feed');
 const { MAX_SEATS_PER_NIK, MAX_TICKETS_PER_ORDER } = require('@rusuh/contracts').constants;
 
 const SELECTION_TTL_MS = 5 * 60 * 1000;
@@ -33,6 +33,7 @@ const PAYMENT_TTL_MS = 10 * 60 * 1000;
  * @param {Function} deps.mayAccessBooking - Booking-access guard, injected by
  *   the container from the presentation layer (auth middleware):
  *   (booking, caller) => boolean. The use case never imports presentation/.
+ * @param {object} [deps.logger] - console-like.
  * @returns {object} Booking use case.
  */
 function createBookingUseCase({
@@ -46,7 +47,8 @@ function createBookingUseCase({
   nikEncryptionKey,
   qrKey,
   fees,
-  mayAccessBooking
+  mayAccessBooking,
+  logger = console
 }) {
   if (typeof mayAccessBooking !== 'function') {
     throw new Error('createBookingUseCase requires mayAccessBooking (injected by the container)');
@@ -89,7 +91,9 @@ function createBookingUseCase({
   function outboxFor(type, booking) {
     const payload = bookingEvent(type, booking, new Date());
     if (!payload) {
-      console.warn(`[core] ${type} for booking ${booking.bookingId} not sent to the queue: no device or slot`);
+      logger.error(
+        `[core] booking_outbox_skipped type=${type} booking=${booking.bookingId} event=${booking.eventId} missing=${bookingEventGap(booking)}`
+      );
       return null;
     }
     return { id: payload.id, type, payload };

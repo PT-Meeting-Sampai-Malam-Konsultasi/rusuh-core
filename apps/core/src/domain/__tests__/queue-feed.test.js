@@ -1,4 +1,11 @@
-const { saleDocument, feedTtlMs, isListed, deviceIdFromAdmissionToken, bookingEvent } = require('@/domain/queue-feed');
+const {
+  saleDocument,
+  feedTtlMs,
+  isListed,
+  deviceIdFromAdmissionToken,
+  bookingEvent,
+  bookingEventGap
+} = require('@/domain/queue-feed');
 
 const EVENT = {
   eventId: 'evt_2026_gbk',
@@ -120,5 +127,17 @@ describe('booking event (booking.v1 on stream:booking)', () => {
     ['an event id the queue cannot key', { eventId: 'evt:1' }]
   ])('is null for a booking with %s (the queue would dead-letter it)', (_name, patch) => {
     expect(bookingEvent('booking.paid', { ...booking, ...patch }, now)).toBeNull();
+  });
+
+  it.each([
+    ['deviceId', { deviceId: null }],
+    ['slotId', { slotId: null }],
+    ['eventId', { eventId: 'evt:1' }]
+  ])('names %s as the field the queue cannot use', (field, patch) => {
+    expect(bookingEventGap({ ...booking, ...patch })).toBe(field);
+  });
+
+  it('names no field for a booking the queue can use', () => {
+    expect(bookingEventGap(booking)).toBeNull();
   });
 });

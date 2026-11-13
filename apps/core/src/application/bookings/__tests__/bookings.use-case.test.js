@@ -27,7 +27,7 @@ function makeValidationToken() {
   return validationToken;
 }
 
-function buildUseCase({ payment } = {}) {
+function buildUseCase({ payment, logger } = {}) {
   const store = new MemoryStore();
   const stock = new MemoryStock();
   const eventBus = new MemoryEventBus();
@@ -51,7 +51,8 @@ function buildUseCase({ payment } = {}) {
     nikEncryptionKey: NIK_KEY,
     qrKey: 'test-qr-key',
     fees: FEES,
-    mayAccessBooking
+    mayAccessBooking,
+    logger
   });
   return { store, stock, eventBus, queueFeed, useCase };
 }
@@ -563,6 +564,18 @@ describe('booking use case (queue feed, booking.v1 outbox)', () => {
     await useCase.enterPayment(booking.bookingId, { account: { sub: 'acc_1' }, admission: { token: 'adm_1' } });
     expect((await store.getBooking(booking.bookingId)).status).toBe('PAYMENT_PENDING');
     expect(store.outbox).toEqual([]);
+  });
+
+  it('logs a countable error naming the missing field when a booking cannot be reported', async () => {
+    const logger = { error: jest.fn(), warn: jest.fn() };
+    const { stock, useCase } = buildUseCase({ logger });
+    await stock.setAdmission('adm_1', { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1' }, 60000);
+    const { booking } = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
+    await useCase.enterPayment(booking.bookingId, { account: { sub: 'acc_1' }, admission: { token: 'adm_1' } });
+    expect(logger.error).toHaveBeenCalledWith(
+      `[core] booking_outbox_skipped type=booking.held booking=${booking.bookingId} event=evt_2026_gbk missing=deviceId`
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it('no longer sends empty-slot messages (nothing reads them; the stream replaces them)', async () => {

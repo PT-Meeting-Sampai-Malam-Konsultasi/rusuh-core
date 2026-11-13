@@ -56,11 +56,17 @@ function deviceIdFromAdmissionToken(raw) {
   }
 }
 
+/** The first booking field the queue could not key a booking.v1 event on, or null. */
+function bookingEventGap(booking) {
+  if (!EVENT_ID.test(booking.eventId || '')) return 'eventId';
+  if (!booking.slotId) return 'slotId';
+  if (!DEVICE_ID.test(booking.deviceId || '')) return 'deviceId';
+  return null;
+}
+
 /** One booking.v1 payload, or null when the queue could not use it. */
 function bookingEvent(type, booking, now) {
-  if (!EVENT_ID.test(booking.eventId || '') || !booking.slotId || !DEVICE_ID.test(booking.deviceId || '')) {
-    return null;
-  }
+  if (bookingEventGap(booking)) return null;
   return {
     v: 1,
     id: crypto.randomUUID(),
@@ -75,4 +81,12 @@ function bookingEvent(type, booking, now) {
   };
 }
 
-module.exports = { saleDocument, feedTtlMs, isListed, deviceIdFromAdmissionToken, bookingEvent, DEVICE_ID };
+module.exports = {
+  saleDocument,
+  feedTtlMs,
+  isListed,
+  deviceIdFromAdmissionToken,
+  bookingEvent,
+  bookingEventGap,
+  DEVICE_ID
+};
