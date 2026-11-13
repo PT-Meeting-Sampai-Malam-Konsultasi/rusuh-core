@@ -1,5 +1,6 @@
 const { apiError } = require('@/application/shared/api-error');
 const { requestOtpSchema, verifyOtpSchema } = require('../validation/otp.validation');
+const { setRefreshCookie } = require('./refresh-cookie');
 
 /**
  * Creates OTP controllers (openapi.yaml requestOtp / verifyOtp).
@@ -30,14 +31,7 @@ function createOtpController(otpUseCase) {
         const session = await otpUseCase.verifyOtp({ ...value, deviceId: deviceIdOf(request) });
         response.locals.skipResponseEnvelope = true;
         if (session.refreshToken) {
-          // Web: refresh token as a __Host-rt cookie (openapi.yaml).
-          response.cookie('__Host-rt', session.refreshToken, {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'strict',
-            path: '/v1/auth',
-            maxAge: 7 * 24 * 60 * 60 * 1000
-          });
+          setRefreshCookie(response, session.refreshToken);
         }
         response.status(200).json(session);
       } catch (err) {

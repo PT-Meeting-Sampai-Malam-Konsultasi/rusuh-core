@@ -84,15 +84,17 @@ function createOriginMatcher(origins) {
 }
 
 /**
- * Builds the CORS middleware shared by every service. Same behaviour as the
- * previous per-service setup: origin allowlist, no credentials.
+ * Builds the CORS middleware shared by every service: origin allowlist, with
+ * credentials enabled so the web app can send and receive the refresh cookie
+ * (fetch credentials: 'include'). Safe because the origin is matched against
+ * the allowlist and never reflected for an unlisted origin or answered with '*'.
  *
  * @param {string[]} origins - Allowed origins (config.corsOrigins).
  * @returns {import('express').RequestHandler} CORS middleware.
  */
 function createCors(origins) {
   const isAllowed = createOriginMatcher(origins);
-  return cors({ origin: (origin, callback) => callback(null, isAllowed(origin)) });
+  return cors({ origin: (origin, callback) => callback(null, isAllowed(origin)), credentials: true });
 }
 
 module.exports = { DEFAULT_CORS_ORIGINS, parseCorsOrigins, createOriginMatcher, createCors };
