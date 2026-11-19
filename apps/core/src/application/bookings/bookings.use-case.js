@@ -207,6 +207,8 @@ function createBookingUseCase({
         entryGate: attendee.entryGate,
         holderName: attendee.fullName,
         nikMasked: attendee.nikMasked,
+        nikHmac: attendee.nikHmac,
+        nikCiphertext: attendee.nikCiphertext,
         qrPayload: qrPayload(code, qrKey),
         sequence
       });

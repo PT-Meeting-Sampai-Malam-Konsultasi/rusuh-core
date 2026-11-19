@@ -333,8 +333,8 @@ class PgStore {
     try {
       await client.query('BEGIN');
       const { rows } = await client.query(
-        `INSERT INTO bookings (booking_id, event_id, account_id, admission_token, slot_id, status, expires_at, payment_expires_at, order_code, price, attendees, snap_token, device_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+        `INSERT INTO bookings (booking_id, event_id, account_id, admission_token, slot_id, status, expires_at, payment_expires_at, attempt, order_code, price, attendees, snap_token, device_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
         [
           booking.bookingId,
           booking.eventId,
@@ -344,6 +344,7 @@ class PgStore {
           booking.status,
           booking.expiresAt,
           booking.paymentExpiresAt || null,
+          booking.attempt || 0,
           booking.orderCode,
           JSON.stringify(booking.price),
           JSON.stringify(booking.attendees),
@@ -400,9 +401,19 @@ class PgStore {
       values.push(patch.paymentExpiresAt);
       idx += 1;
     }
+    if (patch.attempt !== undefined) {
+      sets.push(`attempt = $${idx}`);
+      values.push(patch.attempt);
+      idx += 1;
+    }
     if (patch.snapToken !== undefined) {
       sets.push(`snap_token = $${idx}`);
       values.push(patch.snapToken);
+      idx += 1;
+    }
+    if (patch.redirectUrl !== undefined) {
+      sets.push(`redirect_url = $${idx}`);
+      values.push(patch.redirectUrl);
       idx += 1;
     }
     if (patch.paidAt !== undefined) {
@@ -509,8 +520,8 @@ class PgStore {
       const minted = await ticketRows.reduce(async (prevPromise, row) => {
         const acc = await prevPromise;
         const { rows } = await client.query(
-          `INSERT INTO tickets (ticket_id, ticket_code, booking_id, event_id, category_id, category_name, seating, entry_gate, holder_name, nik_masked, qr_payload)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+          `INSERT INTO tickets (ticket_id, ticket_code, booking_id, event_id, category_id, category_name, seating, entry_gate, holder_name, nik_masked, nik_hmac, nik_ciphertext, qr_payload)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
           [
             row.ticketId,
             row.ticketCode,
@@ -522,6 +533,8 @@ class PgStore {
             row.entryGate,
             row.holderName,
             row.nikMasked,
+            row.nikHmac,
+            row.nikCiphertext,
             row.qrPayload
           ]
         );
@@ -622,6 +635,7 @@ class PgStore {
       status: row.status,
       expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
       paymentExpiresAt: row.payment_expires_at ? new Date(row.payment_expires_at).toISOString() : null,
+      attempt: row.attempt || 0,
       orderCode: row.order_code,
       price: typeof row.price === 'string' ? JSON.parse(row.price) : row.price,
       attendees: typeof row.attendees === 'string' ? JSON.parse(row.attendees) : row.attendees,

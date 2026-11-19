@@ -102,6 +102,8 @@ describe('MemoryStore', () => {
         entryGate: 'Gerbang 1',
         holderName: 'Edy Supardi',
         nikMasked: '3171 •••• •••• 0001',
+        nikHmac: 'hmac-1',
+        nikCiphertext: 'ciphertext-1',
         qrPayload: 'RSH1.SMD-VIP-00001.sig',
         sequence: 1
       }
