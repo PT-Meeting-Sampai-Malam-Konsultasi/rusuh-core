@@ -218,4 +218,71 @@ describe('MemoryStore booking outbox (booking.v1, ADR-0013)', () => {
     expect(await store.relayOutbox(1, async () => {})).toBe(1);
     expect(await store.relayOutbox(1, async () => {})).toBe(0);
   });
+
+  describe('payBookingWithTickets', () => {
+    const baseBooking = {
+      bookingId: 'bk_pay',
+      orderCode: 'RSH-26-000009',
+      eventId: 'evt_2026_gbk',
+      accountId: 'acc_1',
+      admissionToken: 'adm_pay',
+      slotId: 's_1',
+      status: 'PAYMENT_PENDING',
+      expiresAt: new Date(Date.now() + 300000).toISOString(),
+      paymentExpiresAt: new Date(Date.now() + 300000).toISOString(),
+      price: { total: { amount: 100, currency: 'IDR' } },
+      attendees: [],
+      tickets: []
+    };
+    const row = (n) => ({
+      ticketId: `tk_${n}`,
+      ticketCode: `SMD-VIP-0000${n}`,
+      categoryId: 'cat_vip',
+      categoryName: 'VIP',
+      seating: 'seated',
+      entryGate: 'Gerbang 1',
+      holderName: 'Edy Supardi',
+      nikMasked: '3171 •••• •••• 0001',
+      nikHmac: `hmac-${n}`,
+      nikCiphertext: `cipher-${n}`,
+      qrPayload: `RSH1.${n}`,
+      sequence: n
+    });
+    const paidOutbox = { id: 'ob_1', type: 'booking.paid', payload: { bookingId: 'bk_pay' } };
+
+    it('marks the booking PAID, writes the outbox row and issues every ticket together', async () => {
+      await store.createBooking(baseBooking);
+      const result = await store.payBookingWithTickets(
+        'bk_pay',
+        'PAYMENT_PENDING',
+        { paidAt: '2026-11-19T10:00:00.000Z', paymentMethod: 'qris' },
+        paidOutbox,
+        [row(1), row(2)]
+      );
+      expect(result.booking).toMatchObject({ status: 'PAID', paymentMethod: 'qris' });
+      expect(result.tickets).toHaveLength(2);
+      expect(result.booking.tickets).toHaveLength(2);
+      expect(store.outbox).toHaveLength(1);
+      expect(await store.listTicketsByAccount('acc_1')).toHaveLength(2);
+    });
+
+    it('returns null and changes nothing when the booking is not in the expected state', async () => {
+      await store.createBooking({ ...baseBooking, status: 'SELECTION' });
+      expect(await store.payBookingWithTickets('bk_pay', 'PAYMENT_PENDING', {}, paidOutbox, [row(1)])).toBeNull();
+      expect((await store.getBooking('bk_pay')).status).toBe('SELECTION');
+      expect(store.outbox).toHaveLength(0);
+      expect(store.tickets.size).toBe(0);
+    });
+
+    it('rolls the status, outbox and tickets back when issuing fails', async () => {
+      await store.createBooking(baseBooking);
+      jest.spyOn(store, 'mintTickets').mockRejectedValueOnce(new Error('disk full'));
+      await expect(store.payBookingWithTickets('bk_pay', 'PAYMENT_PENDING', {}, paidOutbox, [row(1)])).rejects.toThrow(
+        'disk full'
+      );
+      expect((await store.getBooking('bk_pay')).status).toBe('PAYMENT_PENDING');
+      expect(store.outbox).toHaveLength(0);
+      expect(await store.getActiveBookingByAdmission('adm_pay')).toMatchObject({ bookingId: 'bk_pay' });
+    });
+  });
 });

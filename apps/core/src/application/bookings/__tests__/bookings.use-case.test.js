@@ -163,6 +163,78 @@ describe('booking use case (state transitions)', () => {
     expect(refund.variables.order_code).toBe(booking.orderCode);
   });
 
+  it('expires a settlement at the deadline before sweeper runs, without tickets or paid outbox', async () => {
+    const DEVICE = 'w_lCphzERtHxSl8yRoXHcx0g';
+    const { store, stock, eventBus, useCase } = buildUseCase();
+    await stock.setAdmission(
+      'adm_deadline',
+      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_deadline', max_tickets: 3, device_id: DEVICE },
+      60000
+    );
+    const { booking } = await useCase.createBooking(
+      ACCOUNT,
+      { token: 'adm_deadline', slotId: 's_deadline', maxTickets: 3, deviceId: DEVICE },
+      createBody(makeValidationToken())
+    );
+    await useCase.enterPayment(booking.bookingId, {
+      account: { sub: 'acc_1' },
+      admission: { token: 'adm_deadline' }
+    });
+    const held = await store.getBooking(booking.bookingId);
+    await store.updateBooking(booking.bookingId, { paymentExpiresAt: new Date(Date.now()).toISOString() });
+
+    const result = await useCase.confirmPayment(booking.bookingId, {
+      orderId: `${booking.bookingId}-1`,
+      transactionId: 'txn_deadline',
+      transactionStatus: 'settlement',
+      paymentType: 'qris',
+      grossAmount: held.price.total.amount
+    });
+
+    expect(result).toMatchObject({ handled: true, late: true });
+    expect(await store.getBooking(booking.bookingId)).toMatchObject({ status: 'EXPIRED', refundRequired: true });
+    expect(await store.listTicketsByAccount('acc_1')).toHaveLength(0);
+    expect(store.outbox.map((row) => row.type)).toEqual(['booking.held', 'booking.expired']);
+    expect(eventBus.emailJobs.map((job) => job.type)).toEqual(['EMAIL_EXPIRED', 'EMAIL_REFUND_FLAGGED']);
+  });
+
+  it('keeps the booking PAYMENT_PENDING when issuing tickets fails, and a retry completes it', async () => {
+    const DEVICE = 'w_lCphzERtHxSl8yRoXHcx0g';
+    const { store, stock, eventBus, useCase } = buildUseCase();
+    await stock.setAdmission(
+      'adm_q',
+      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_q', max_tickets: 3, device_id: DEVICE },
+      60000
+    );
+    const { booking } = await useCase.createBooking(
+      ACCOUNT,
+      { token: 'adm_q', slotId: 's_q', maxTickets: 3, deviceId: DEVICE },
+      createBody(makeValidationToken())
+    );
+    await useCase.enterPayment(booking.bookingId, { account: { sub: 'acc_1' }, admission: { token: 'adm_q' } });
+    const settlement = {
+      orderId: `${booking.bookingId}-1`,
+      transactionId: 'txn_retry',
+      transactionStatus: 'settlement',
+      paymentType: 'qris',
+      grossAmount: 3548300
+    };
+    const paidEvents = () => store.outbox.filter((row) => row.type === 'booking.paid');
+
+    const mint = jest.spyOn(store, 'mintTickets').mockRejectedValueOnce(new Error('disk full'));
+    await expect(useCase.confirmPayment(booking.bookingId, settlement)).rejects.toThrow('disk full');
+    expect((await store.getBooking(booking.bookingId)).status).toBe('PAYMENT_PENDING');
+    expect(paidEvents()).toHaveLength(0);
+    expect(eventBus.emailJobs).toHaveLength(0);
+
+    mint.mockRestore();
+    const retried = await useCase.confirmPayment(booking.bookingId, settlement);
+    expect(retried.handled).toBe(true);
+    expect(retried.booking.status).toBe('PAID');
+    expect(retried.booking.tickets).toHaveLength(1);
+    expect(paidEvents()).toHaveLength(1);
+  });
+
   it('enqueues the EMAIL_TICKET envelope to the buyer on settlement', async () => {
     const { store, stock, eventBus, useCase } = buildUseCase();
     await stock.setAdmission(

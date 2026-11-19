@@ -275,6 +275,89 @@ describe('PgStore (live Postgres adapter, fake Pool)', () => {
     expect(client.release).toHaveBeenCalledTimes(1);
   });
 
+  describe('payBookingWithTickets', () => {
+    const ticketInput = {
+      ticketId: 'tk_1',
+      ticketCode: 'SMD-FB-00001',
+      categoryId: 'cat_1',
+      categoryName: 'Festival B',
+      seating: 'Festival',
+      entryGate: 'Gate A',
+      holderName: 'Edy Supardi',
+      nikMasked: '3171 •••• •••• 0001',
+      nikHmac: 'h',
+      nikCiphertext: 'c',
+      qrPayload: 'RSH1.SMD-FB-00001.abc'
+    };
+    const paidOutbox = { id: 'ob_1', type: 'booking.paid', payload: { bookingId: 'bk_1' } };
+
+    /** Routes each statement of the transaction to a canned answer. */
+    function routedClient({ updateRows = [{ ...BOOKING_ROW, status: 'PAID' }], failOn = null } = {}) {
+      return fakeClient({
+        queryImpl: async (text) => {
+          if (failOn && text.includes(failOn)) throw new Error('boom');
+          if (text.startsWith("UPDATE bookings SET status = 'PAID'")) return { rows: updateRows };
+          if (text.startsWith('INSERT INTO tickets')) return { rows: [TICKET_ROW] };
+          if (text.startsWith('UPDATE bookings SET tickets')) return { rows: [{ ...BOOKING_ROW, status: 'PAID' }] };
+          return { rows: [] };
+        }
+      });
+    }
+
+    it('runs status, outbox and tickets in one transaction and commits', async () => {
+      const client = routedClient();
+      const pool = fakePool();
+      pool.connect = jest.fn(async () => client);
+      const result = await new PgStore(pool).payBookingWithTickets(
+        'bk_1',
+        'PAYMENT_PENDING',
+        { paidAt: '2026-11-19T10:00:00.000Z', paymentMethod: 'qris' },
+        paidOutbox,
+        [ticketInput]
+      );
+      expect(client.queries[0].text).toBe('BEGIN');
+      expect(client.queries.map((query) => query.text)).toEqual(
+        expect.arrayContaining([expect.stringContaining('INSERT INTO booking_outbox'), 'COMMIT'])
+      );
+      expect(client.queries.at(-1).text).toBe('COMMIT');
+      expect(result.tickets).toHaveLength(1);
+      expect(result.booking.status).toBe('PAID');
+      expect(client.release).toHaveBeenCalledTimes(1);
+    });
+
+    it('rolls back and returns null when the status guard matches no row', async () => {
+      const client = routedClient({ updateRows: [] });
+      const pool = fakePool();
+      pool.connect = jest.fn(async () => client);
+      await expect(
+        new PgStore(pool).payBookingWithTickets('bk_1', 'PAYMENT_PENDING', {}, paidOutbox, [ticketInput])
+      ).resolves.toBeNull();
+      expect(client.queries.map((query) => query.text)).toContain('ROLLBACK');
+      expect(client.queries.map((query) => query.text)).not.toContain('COMMIT');
+      expect(client.release).toHaveBeenCalledTimes(1);
+    });
+
+    it('rolls back everything when a ticket insert fails', async () => {
+      const client = routedClient({ failOn: 'INSERT INTO tickets' });
+      const pool = fakePool();
+      pool.connect = jest.fn(async () => client);
+      await expect(
+        new PgStore(pool).payBookingWithTickets('bk_1', 'PAYMENT_PENDING', {}, paidOutbox, [ticketInput])
+      ).rejects.toThrow('boom');
+      expect(client.queries.map((query) => query.text)).toContain('ROLLBACK');
+      expect(client.queries.map((query) => query.text)).not.toContain('COMMIT');
+      expect(client.release).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips the outbox insert when no outbox row is given', async () => {
+      const client = routedClient();
+      const pool = fakePool();
+      pool.connect = jest.fn(async () => client);
+      await new PgStore(pool).payBookingWithTickets('bk_1', 'PAYMENT_PENDING', {}, null, [ticketInput]);
+      expect(client.queries.map((query) => query.text).join('\n')).not.toContain('booking_outbox');
+    });
+  });
+
   it('listTicketsByAccount and getTicket map ticket rows or return null', async () => {
     const pool = fakePool({ queryImpl: async () => ({ rows: [TICKET_ROW] }) });
     const store = new PgStore(pool);

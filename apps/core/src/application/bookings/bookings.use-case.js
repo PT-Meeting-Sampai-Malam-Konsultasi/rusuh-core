@@ -189,7 +189,15 @@ function createBookingUseCase({
     return true;
   }
 
-  async function mintTickets(booking) {
+  /**
+   * Builds the ticket rows (codes, QR payloads, sequences) for a booking
+   * without writing any ticket. Persisting happens together with the PAID
+   * transition so the two can never diverge.
+   *
+   * @param {object} booking - Booking whose attendees receive tickets.
+   * @returns {Promise<object[]>} Ticket rows ready for the store.
+   */
+  async function buildTicketRows(booking) {
     const event = await store.getEvent(booking.eventId);
     const eventCode = event?.eventCode || 'RSH';
     // Sequences are assigned in order (reduce, not Promise.all: nextTicketSeq
@@ -214,7 +222,7 @@ function createBookingUseCase({
       });
       return rows;
     }, Promise.resolve([]));
-    return store.mintTickets(booking, ticketRows);
+    return ticketRows;
   }
 
   let api;
@@ -560,20 +568,34 @@ function createBookingUseCase({
         return { handled: false, reason: 'amount_mismatch' };
       }
 
-      // Guard: only PAYMENT_PENDING -> PAID (0 rows = already transitioned).
-      const paid = await store.updateBookingStatus(
+      // One transaction: status PAID + outbox row + tickets (all or nothing).
+      // Only PAYMENT_PENDING -> PAID; 0 rows = already transitioned. A failure
+      // rolls everything back, so the booking stays PAYMENT_PENDING and the
+      // next webhook / check-status retries the whole step.
+      const ticketRows = await buildTicketRows(booking);
+      const settled = await store.payBookingWithTickets(
         bookingId,
         'PAYMENT_PENDING',
-        'PAID',
         { paidAt: new Date().toISOString(), paymentMethod: paymentType || null },
-        outboxFor('booking.paid', booking)
+        outboxFor('booking.paid', booking),
+        ticketRows
       );
-      if (!paid) return { handled: true, duplicate: true, booking: await store.getBooking(bookingId) };
-
-      // Mint public ticket codes (D19) + settle the hold (held -> sold).
-      const minted = await mintTickets(paid);
-      const withTickets = await store.updateBooking(bookingId, { tickets: minted });
-      await settleHold(paid);
+      if (!settled) {
+        const current = await store.getBooking(bookingId);
+        if (current?.status === 'PAYMENT_PENDING' && new Date(current.paymentExpiresAt).getTime() <= Date.now()) {
+          await this.expireBooking(current);
+          return this.confirmPayment(bookingId, {
+            orderId,
+            transactionId,
+            transactionStatus,
+            paymentType,
+            grossAmount
+          });
+        }
+        return { handled: true, duplicate: true, booking: current };
+      }
+      const { booking: withTickets, tickets: minted } = settled;
+      await settleHold(withTickets);
       await enqueueBookingEmail(withTickets, (account, event, links) =>
         buildTicketEnvelope({ account, booking: withTickets, event, tickets: minted, links })
       );
