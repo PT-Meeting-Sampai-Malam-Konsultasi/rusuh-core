@@ -45,6 +45,19 @@ function snapItemDetails(price) {
 }
 
 /**
+ * Parses a provider gross amount as a whole IDR amount. Midtrans Get Status
+ * returns gross_amount as a decimal string (for example "133300.00"), while
+ * bookings store whole rupiah integers.
+ *
+ * @param {number|string} value - Gross amount returned by the payment provider.
+ * @returns {number|null} Safe integer IDR amount, or null when malformed/fractional.
+ */
+function parseIdrAmount(value) {
+  const amount = typeof value === 'number' || typeof value === 'string' ? Number(value) : Number.NaN;
+  return Number.isSafeInteger(amount) ? amount : null;
+}
+
+/**
  * Booking use case (LLD-02 §5–§7, §10–§11).
  * States: SELECTION (5 min, no hold) -> PAYMENT_PENDING (10 min, hold)
  *   -> PAID / EXPIRED. A late successful callback NEVER resurrects (D11).
@@ -541,7 +554,7 @@ function createBookingUseCase({
         return { handled: true, late: true, booking: flagged };
       }
       if (booking.status !== 'PAYMENT_PENDING') return { handled: false, reason: 'not_held' };
-      if (grossAmount !== undefined && grossAmount !== booking.price.total.amount) {
+      if (grossAmount !== undefined && parseIdrAmount(grossAmount) !== booking.price.total.amount) {
         return { handled: false, reason: 'amount_mismatch' };
       }
 

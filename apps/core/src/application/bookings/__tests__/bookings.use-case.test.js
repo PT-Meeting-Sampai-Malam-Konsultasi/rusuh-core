@@ -262,6 +262,35 @@ describe('booking use case (state transitions)', () => {
       expect((await store.getBooking(booking.bookingId)).status).toBe('PAID');
     });
 
+    it('accepts Midtrans decimal-string whole-IDR amounts', async () => {
+      const { store, useCase, booking } = await heldBooking();
+      const result = await useCase.confirmPayment(booking.bookingId, {
+        orderId: `${booking.bookingId}-1`,
+        transactionId: 'txn_decimal',
+        transactionStatus: 'settlement',
+        paymentType: 'qris',
+        grossAmount: '3548300.00'
+      });
+      expect(result.handled).toBe(true);
+      expect((await store.getBooking(booking.bookingId)).status).toBe('PAID');
+    });
+
+    it.each(['3548301.00', '3548300.50', 'not-an-amount'])(
+      'rejects invalid settlement amount %s',
+      async (grossAmount) => {
+        const { store, useCase, booking } = await heldBooking();
+        const result = await useCase.confirmPayment(booking.bookingId, {
+          orderId: `${booking.bookingId}-1`,
+          transactionId: 'txn_bad_amount',
+          transactionStatus: 'settlement',
+          paymentType: 'qris',
+          grossAmount
+        });
+        expect(result).toEqual({ handled: false, reason: 'amount_mismatch' });
+        expect((await store.getBooking(booking.bookingId)).status).toBe('PAYMENT_PENDING');
+      }
+    );
+
     it('keeps the duplicate and late-payment paths unchanged for settlement', async () => {
       const { useCase, booking } = await heldBooking();
       const body = {
