@@ -9,8 +9,8 @@ const { MidtransError } = require('@/domain/ports/midtrans');
  * Get Status:  GET  {apiBaseUrl}/v2/{order_id}/status
  * Expire:      POST {apiBaseUrl}/v2/{order_id}/expire
  */
-// Match the enabled Sandbox Snap channels used in the demo: VA plus QRIS.
-const ENABLED_PAYMENTS = Object.freeze(['bca_va', 'echannel', 'bni_va', 'bri_va', 'qris']);
+// Match the Sandbox Snap channels enabled for the demo: bank VAs plus QRIS (Snap code `other_qris`).
+const ENABLED_PAYMENTS = Object.freeze(['bca_va', 'echannel', 'bni_va', 'bri_va', 'other_qris']);
 
 /**
  * Formats a Date as a Midtrans expiry start_time: "YYYY-MM-DD HH:mm:ss +0700" (WIB).
