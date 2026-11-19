@@ -3,6 +3,8 @@ const { createHealthController } = require('@/presentation/http/controllers/heal
 const { createHealthRouter } = require('@/presentation/http/routes/health.route');
 const { createAssetsController } = require('@/presentation/http/controllers/assets.controller');
 const { createAssetsRouter } = require('@/presentation/http/routes/assets.route');
+const { createPaymentController } = require('@/presentation/http/controllers/payment.controller');
+const { createPaymentRouter } = require('@/presentation/http/routes/payment.route');
 const { createEventsController } = require('@/presentation/http/controllers/events.controller');
 const { createEventsRouter } = require('@/presentation/http/routes/events.route');
 const { createAttendeesController } = require('@/presentation/http/controllers/attendees.controller');
@@ -34,6 +36,11 @@ function mountRoutes(app, { isReady, isShuttingDown, deps } = {}) {
   const healthUseCase = createHealthUseCase({ isReady, isShuttingDown });
   const healthController = createHealthController(healthUseCase);
   const assetsController = createAssetsController(graph.eventAssets);
+  const paymentController = createPaymentController({
+    bookings: graph.useCases.bookings,
+    store: graph.store,
+    snapClientKey: graph.config.midtransClientKey
+  });
 
   const eventsController = createEventsController(graph.useCases.events);
   const attendeesController = createAttendeesController(graph.useCases.attendees);
@@ -43,6 +50,7 @@ function mountRoutes(app, { isReady, isShuttingDown, deps } = {}) {
 
   app.use(createHealthRouter(healthController));
   app.use(createAssetsRouter(assetsController));
+  app.use(createPaymentRouter(paymentController, graph.auth));
   app.use(createAdmissionRouter(admissionController, graph.auth));
   app.use(createEventsRouter(eventsController, graph.auth));
   app.use(createAttendeesRouter(attendeesController, graph.auth));
