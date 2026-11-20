@@ -67,6 +67,68 @@ function createBody(validationToken) {
   };
 }
 
+/**
+ * Creates a SELECTION booking with a matching admission.
+ *
+ * @param {object} options - Fixture overrides.
+ * @param {string} [options.admissionToken] - Admission token for this fixture.
+ * @param {string|null} [options.deviceId] - Queue device id, required for outbox assertions.
+ * @param {object} [options.payment] - Payment client override passed to the use case.
+ * @returns {Promise<object>} Use-case dependencies, the booking and the caller.
+ */
+async function createSelectionBooking({ admissionToken = 'adm_1', deviceId = null, payment } = {}) {
+  const built = buildUseCase({ payment });
+  const admission = {
+    token: admissionToken,
+    slotId: `slot_${admissionToken}`,
+    maxTickets: 3,
+    ...(deviceId ? { deviceId } : {})
+  };
+  await built.stock.setAdmission(
+    admissionToken,
+    {
+      user_id: ACCOUNT.sub,
+      event_id: 'evt_2026_gbk',
+      slot_id: admission.slotId,
+      max_tickets: admission.maxTickets,
+      ...(deviceId ? { device_id: deviceId } : {})
+    },
+    60000
+  );
+  const { booking } = await built.useCase.createBooking(ACCOUNT, admission, createBody(makeValidationToken()));
+  return { ...built, booking, caller: { account: ACCOUNT, admission: { token: admissionToken } } };
+}
+
+/**
+ * Creates a booking that already entered payment (PAYMENT_PENDING).
+ *
+ * @param {object} [options] - Same options as createSelectionBooking.
+ * @returns {Promise<object>} Use-case dependencies, the held booking and the caller.
+ */
+async function createHeldBooking(options = {}) {
+  const selection = await createSelectionBooking(options);
+  await selection.useCase.enterPayment(selection.booking.bookingId, selection.caller);
+  return selection;
+}
+
+/**
+ * Builds a confirmed Midtrans payment result for a fixture booking.
+ *
+ * @param {object} booking - Held booking whose amount/order are used.
+ * @param {object} [overrides] - Payment result fields to override.
+ * @returns {object} Payment confirmation payload.
+ */
+function settlementFor(booking, overrides = {}) {
+  return {
+    orderId: `${booking.bookingId}-1`,
+    transactionId: 'txn_settlement',
+    transactionStatus: 'settlement',
+    paymentType: 'qris',
+    grossAmount: booking.price.total.amount,
+    ...overrides
+  };
+}
+
 describe('booking use case (state transitions)', () => {
   it('creates a SELECTION booking with the LLD-02 price breakdown', async () => {
     const { store, useCase } = buildUseCase();
@@ -129,23 +191,13 @@ describe('booking use case (state transitions)', () => {
   });
 
   it('never resurrects an EXPIRED booking on a late payment (D11)', async () => {
-    const { store, stock, eventBus, useCase } = buildUseCase();
-    await stock.setAdmission(
-      'adm_1',
-      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1', max_tickets: 3 },
-      60000
-    );
-    const { booking } = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
-    await useCase.enterPayment(booking.bookingId, { account: { sub: 'acc_1' }, admission: { token: 'adm_1' } });
+    const { store, eventBus, useCase, booking } = await createHeldBooking();
     const held = await store.getBooking(booking.bookingId);
     await useCase.expireBooking(held, 'expired');
-    const result = await useCase.confirmPayment(booking.bookingId, {
-      orderId: `${booking.bookingId}-1`,
-      transactionId: 'txn_late',
-      transactionStatus: 'settlement',
-      paymentType: 'gopay',
-      grossAmount: 3548300
-    });
+    const result = await useCase.confirmPayment(
+      booking.bookingId,
+      settlementFor(booking, { transactionId: 'txn_late', paymentType: 'gopay' })
+    );
     expect(result.handled).toBe(true);
     expect(result.late).toBe(true);
     expect((await store.getBooking(booking.bookingId)).status).toBe('EXPIRED');
@@ -164,32 +216,16 @@ describe('booking use case (state transitions)', () => {
   });
 
   it('expires a settlement at the deadline before sweeper runs, without tickets or paid outbox', async () => {
-    const DEVICE = 'w_lCphzERtHxSl8yRoXHcx0g';
-    const { store, stock, eventBus, useCase } = buildUseCase();
-    await stock.setAdmission(
-      'adm_deadline',
-      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_deadline', max_tickets: 3, device_id: DEVICE },
-      60000
-    );
-    const { booking } = await useCase.createBooking(
-      ACCOUNT,
-      { token: 'adm_deadline', slotId: 's_deadline', maxTickets: 3, deviceId: DEVICE },
-      createBody(makeValidationToken())
-    );
-    await useCase.enterPayment(booking.bookingId, {
-      account: { sub: 'acc_1' },
-      admission: { token: 'adm_deadline' }
+    const { store, eventBus, useCase, booking } = await createHeldBooking({
+      admissionToken: 'adm_deadline',
+      deviceId: 'w_lCphzERtHxSl8yRoXHcx0g'
     });
-    const held = await store.getBooking(booking.bookingId);
     await store.updateBooking(booking.bookingId, { paymentExpiresAt: new Date(Date.now()).toISOString() });
 
-    const result = await useCase.confirmPayment(booking.bookingId, {
-      orderId: `${booking.bookingId}-1`,
-      transactionId: 'txn_deadline',
-      transactionStatus: 'settlement',
-      paymentType: 'qris',
-      grossAmount: held.price.total.amount
-    });
+    const result = await useCase.confirmPayment(
+      booking.bookingId,
+      settlementFor(booking, { transactionId: 'txn_deadline' })
+    );
 
     expect(result).toMatchObject({ handled: true, late: true });
     expect(await store.getBooking(booking.bookingId)).toMatchObject({ status: 'EXPIRED', refundRequired: true });
@@ -199,26 +235,11 @@ describe('booking use case (state transitions)', () => {
   });
 
   it('keeps the booking PAYMENT_PENDING when issuing tickets fails, and a retry completes it', async () => {
-    const DEVICE = 'w_lCphzERtHxSl8yRoXHcx0g';
-    const { store, stock, eventBus, useCase } = buildUseCase();
-    await stock.setAdmission(
-      'adm_q',
-      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_q', max_tickets: 3, device_id: DEVICE },
-      60000
-    );
-    const { booking } = await useCase.createBooking(
-      ACCOUNT,
-      { token: 'adm_q', slotId: 's_q', maxTickets: 3, deviceId: DEVICE },
-      createBody(makeValidationToken())
-    );
-    await useCase.enterPayment(booking.bookingId, { account: { sub: 'acc_1' }, admission: { token: 'adm_q' } });
-    const settlement = {
-      orderId: `${booking.bookingId}-1`,
-      transactionId: 'txn_retry',
-      transactionStatus: 'settlement',
-      paymentType: 'qris',
-      grossAmount: 3548300
-    };
+    const { store, eventBus, useCase, booking } = await createHeldBooking({
+      admissionToken: 'adm_q',
+      deviceId: 'w_lCphzERtHxSl8yRoXHcx0g'
+    });
+    const settlement = settlementFor(booking, { transactionId: 'txn_retry' });
     const paidEvents = () => store.outbox.filter((row) => row.type === 'booking.paid');
 
     const mint = jest.spyOn(store, 'mintTickets').mockRejectedValueOnce(new Error('disk full'));
@@ -236,21 +257,11 @@ describe('booking use case (state transitions)', () => {
   });
 
   it('enqueues the EMAIL_TICKET envelope to the buyer on settlement', async () => {
-    const { store, stock, eventBus, useCase } = buildUseCase();
-    await stock.setAdmission(
-      'adm_1',
-      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1', max_tickets: 3 },
-      60000
+    const { store, eventBus, useCase, booking } = await createHeldBooking();
+    const result = await useCase.confirmPayment(
+      booking.bookingId,
+      settlementFor(booking, { transactionId: 'txn_ok', paymentType: 'bank_transfer' })
     );
-    const { booking } = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
-    await useCase.enterPayment(booking.bookingId, { account: { sub: 'acc_1' }, admission: { token: 'adm_1' } });
-    const result = await useCase.confirmPayment(booking.bookingId, {
-      orderId: `${booking.bookingId}-1`,
-      transactionId: 'txn_ok',
-      transactionStatus: 'settlement',
-      paymentType: 'bank_transfer',
-      grossAmount: 3548300
-    });
     expect(result.handled).toBe(true);
     expect(eventBus.emailJobs).toHaveLength(1);
     const envelope = eventBus.emailJobs[0];
@@ -494,22 +505,12 @@ describe('booking use case (error paths)', () => {
   });
 
   it('enterPayment refuses a PAID booking and an expired SELECTION booking (BOOKING_NOT_HELD)', async () => {
-    const { store, stock, useCase } = buildUseCase();
-    await stock.setAdmission(
-      'adm_1',
-      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1', max_tickets: 3 },
-      60000
+    const { store, useCase, booking } = await createHeldBooking();
+    const caller = { account: ACCOUNT, admission: { token: 'adm_1' } };
+    await useCase.confirmPayment(
+      booking.bookingId,
+      settlementFor(booking, { transactionId: 'txn_1', paymentType: 'gopay' })
     );
-    const { booking } = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
-    const caller = { account: { sub: 'acc_1' }, admission: { token: 'adm_1' } };
-    await useCase.enterPayment(booking.bookingId, caller);
-    await useCase.confirmPayment(booking.bookingId, {
-      orderId: `${booking.bookingId}-1`,
-      transactionId: 'txn_1',
-      transactionStatus: 'settlement',
-      paymentType: 'gopay',
-      grossAmount: 3548300
-    });
     expect((await store.getBooking(booking.bookingId)).status).toBe('PAID');
     await expect(useCase.enterPayment(booking.bookingId, caller)).rejects.toMatchObject({ code: 'BOOKING_NOT_HELD' });
 
@@ -569,7 +570,7 @@ describe('booking use case (error paths)', () => {
   });
 
   it('enterPayment returns 503 when Snap creation fails (retryable)', async () => {
-    const { stock, useCase } = buildUseCase({
+    const { useCase, booking, caller } = await createSelectionBooking({
       payment: {
         isStub: false,
         createSnap: async () => {
@@ -579,13 +580,6 @@ describe('booking use case (error paths)', () => {
         expire: async () => {}
       }
     });
-    await stock.setAdmission(
-      'adm_1',
-      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1', max_tickets: 3 },
-      60000
-    );
-    const { booking } = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
-    const caller = { account: { sub: 'acc_1' }, admission: { token: 'adm_1' } };
     const error = await useCase.enterPayment(booking.bookingId, caller).catch((e) => e);
     expect(error.code).toBe('INTERNAL_ERROR');
     expect(error.status).toBe(503);
@@ -623,28 +617,17 @@ describe('booking use case (error paths)', () => {
   });
 
   it('confirmPayment rejects an amount mismatch and never resurrects', async () => {
-    const { store, stock, useCase } = buildUseCase();
-    await stock.setAdmission(
-      'adm_1',
-      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1', max_tickets: 3 },
-      60000
+    const { store, useCase, booking } = await createHeldBooking();
+    const result = await useCase.confirmPayment(
+      booking.bookingId,
+      settlementFor(booking, { transactionId: 'txn_1', paymentType: 'gopay', grossAmount: 1 })
     );
-    const { booking } = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
-    const caller = { account: { sub: 'acc_1' }, admission: { token: 'adm_1' } };
-    await useCase.enterPayment(booking.bookingId, caller);
-    const result = await useCase.confirmPayment(booking.bookingId, {
-      orderId: `${booking.bookingId}-1`,
-      transactionId: 'txn_1',
-      transactionStatus: 'settlement',
-      paymentType: 'gopay',
-      grossAmount: 1
-    });
     expect(result).toEqual({ handled: false, reason: 'amount_mismatch' });
     expect((await store.getBooking(booking.bookingId)).status).toBe('PAYMENT_PENDING');
   });
 
   it('expireBooking still expires when the Midtrans expire call fails (best-effort)', async () => {
-    const { store, stock, useCase } = buildUseCase({
+    const { store, useCase, booking } = await createHeldBooking({
       payment: {
         isStub: false,
         createSnap: async ({ orderId }) => ({ orderId, snapToken: 'snap-1', redirectUrl: 'https://pay.example/1' }),
@@ -654,14 +637,6 @@ describe('booking use case (error paths)', () => {
         }
       }
     });
-    await stock.setAdmission(
-      'adm_1',
-      { user_id: 'acc_1', event_id: 'evt_2026_gbk', slot_id: 's_1', max_tickets: 3 },
-      60000
-    );
-    const { booking } = await useCase.createBooking(ACCOUNT, ADMISSION, createBody(makeValidationToken()));
-    const caller = { account: { sub: 'acc_1' }, admission: { token: 'adm_1' } };
-    await useCase.enterPayment(booking.bookingId, caller);
     const held = await store.getBooking(booking.bookingId);
     const expired = await useCase.expireBooking(held, 'expired');
     expect(expired.status).toBe('EXPIRED');
