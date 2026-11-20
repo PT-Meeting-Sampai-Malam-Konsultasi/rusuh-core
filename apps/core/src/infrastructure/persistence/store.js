@@ -195,6 +195,34 @@ class MemoryStore {
     return { ...updated };
   }
 
+  /**
+   * Moves a booking to PAID and issues its tickets as one unit: either the
+   * status change, the outbox row and every ticket exist, or none does.
+   * Returns { booking, tickets }, or null when the guard failed (0 rows).
+   */
+  async payBookingWithTickets(bookingId, fromStatus, patch, outbox, ticketRows) {
+    const pending = this.bookings.get(bookingId);
+    if (!pending || !pending.paymentExpiresAt || new Date(pending.paymentExpiresAt).getTime() <= Date.now())
+      return null;
+    const snapshot = {
+      bookings: new Map(this.bookings),
+      tickets: new Map(this.tickets),
+      outbox: [...this.outbox],
+      activeByAdmission: new Map(this.activeByAdmission),
+      activeByAccountEvent: new Map(this.activeByAccountEvent)
+    };
+    try {
+      const paid = await this.updateBookingStatus(bookingId, fromStatus, 'PAID', patch, outbox);
+      if (!paid) return null;
+      const tickets = await this.mintTickets(paid, ticketRows);
+      const booking = await this.updateBooking(bookingId, { tickets });
+      return { booking, tickets };
+    } catch (error) {
+      Object.assign(this, snapshot);
+      throw error;
+    }
+  }
+
   async mintTickets(booking, ticketRows) {
     // Rows carry a pre-assigned sequence (from nextTicketSeq) + ticketCode + qrPayload.
     const minted = ticketRows.map((row) => {
@@ -333,8 +361,8 @@ class PgStore {
     try {
       await client.query('BEGIN');
       const { rows } = await client.query(
-        `INSERT INTO bookings (booking_id, event_id, account_id, admission_token, slot_id, status, expires_at, payment_expires_at, order_code, price, attendees, snap_token, device_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+        `INSERT INTO bookings (booking_id, event_id, account_id, admission_token, slot_id, status, expires_at, payment_expires_at, attempt, order_code, price, attendees, snap_token, device_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
         [
           booking.bookingId,
           booking.eventId,
@@ -344,6 +372,7 @@ class PgStore {
           booking.status,
           booking.expiresAt,
           booking.paymentExpiresAt || null,
+          booking.attempt || 0,
           booking.orderCode,
           JSON.stringify(booking.price),
           JSON.stringify(booking.attendees),
@@ -400,9 +429,19 @@ class PgStore {
       values.push(patch.paymentExpiresAt);
       idx += 1;
     }
+    if (patch.attempt !== undefined) {
+      sets.push(`attempt = $${idx}`);
+      values.push(patch.attempt);
+      idx += 1;
+    }
     if (patch.snapToken !== undefined) {
       sets.push(`snap_token = $${idx}`);
       values.push(patch.snapToken);
+      idx += 1;
+    }
+    if (patch.redirectUrl !== undefined) {
+      sets.push(`redirect_url = $${idx}`);
+      values.push(patch.redirectUrl);
       idx += 1;
     }
     if (patch.paidAt !== undefined) {
@@ -499,6 +538,30 @@ class PgStore {
     return rows[0] ? this._rowToBooking(rows[0]) : null;
   }
 
+  /** Inserts one ticket row inside an open transaction and returns it mapped. */
+  async _insertTicket(client, booking, row) {
+    const { rows } = await client.query(
+      `INSERT INTO tickets (ticket_id, ticket_code, booking_id, event_id, category_id, category_name, seating, entry_gate, holder_name, nik_masked, nik_hmac, nik_ciphertext, qr_payload)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+      [
+        row.ticketId,
+        row.ticketCode,
+        booking.bookingId,
+        booking.eventId,
+        row.categoryId,
+        row.categoryName,
+        row.seating,
+        row.entryGate,
+        row.holderName,
+        row.nikMasked,
+        row.nikHmac,
+        row.nikCiphertext,
+        row.qrPayload
+      ]
+    );
+    return this._rowToTicket(rows[0]);
+  }
+
   async mintTickets(booking, ticketRows) {
     // Rows carry a pre-assigned sequence (from nextTicketSeq) + ticketCode + qrPayload.
     const client = await this.pool.connect();
@@ -508,30 +571,61 @@ class PgStore {
       // concurrent queries); reduce keeps the order without await-in-loop.
       const minted = await ticketRows.reduce(async (prevPromise, row) => {
         const acc = await prevPromise;
-        const { rows } = await client.query(
-          `INSERT INTO tickets (ticket_id, ticket_code, booking_id, event_id, category_id, category_name, seating, entry_gate, holder_name, nik_masked, qr_payload)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-          [
-            row.ticketId,
-            row.ticketCode,
-            booking.bookingId,
-            booking.eventId,
-            row.categoryId,
-            row.categoryName,
-            row.seating,
-            row.entryGate,
-            row.holderName,
-            row.nikMasked,
-            row.qrPayload
-          ]
-        );
-        acc.push(this._rowToTicket(rows[0]));
+        acc.push(await this._insertTicket(client, booking, row));
         return acc;
       }, Promise.resolve([]));
       await client.query('COMMIT');
       return minted;
     } catch (error) {
       await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Moves a booking to PAID and issues its tickets in ONE transaction, so a
+   * failure while minting can never leave a PAID booking without tickets.
+   * Returns { booking, tickets }, or null when the status guard matched no row
+   * (another request already moved the booking).
+   */
+  async payBookingWithTickets(bookingId, fromStatus, patch, outbox, ticketRows) {
+    const from = Array.isArray(fromStatus) ? fromStatus : [fromStatus];
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const { rows } = await client.query(
+        `UPDATE bookings SET status = 'PAID', paid_at = $3, payment_method = $4, updated_at = NOW()
+         WHERE booking_id = $1 AND status = ANY($2) AND payment_expires_at > NOW() RETURNING *`,
+        [bookingId, from, patch.paidAt || null, patch.paymentMethod || null]
+      );
+      if (!rows[0]) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      const paid = this._rowToBooking(rows[0]);
+      if (outbox) {
+        await client.query('INSERT INTO booking_outbox (id, type, booking_id, payload) VALUES ($1,$2,$3,$4::jsonb)', [
+          outbox.id,
+          outbox.type,
+          bookingId,
+          JSON.stringify(outbox.payload)
+        ]);
+      }
+      const tickets = await ticketRows.reduce(async (prevPromise, row) => {
+        const acc = await prevPromise;
+        acc.push(await this._insertTicket(client, paid, row));
+        return acc;
+      }, Promise.resolve([]));
+      const { rows: updated } = await client.query(
+        'UPDATE bookings SET tickets = $2::jsonb WHERE booking_id = $1 RETURNING *',
+        [bookingId, JSON.stringify(tickets)]
+      );
+      await client.query('COMMIT');
+      return { booking: this._rowToBooking(updated[0]), tickets };
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
       throw error;
     } finally {
       client.release();
@@ -622,6 +716,7 @@ class PgStore {
       status: row.status,
       expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
       paymentExpiresAt: row.payment_expires_at ? new Date(row.payment_expires_at).toISOString() : null,
+      attempt: row.attempt || 0,
       orderCode: row.order_code,
       price: typeof row.price === 'string' ? JSON.parse(row.price) : row.price,
       attendees: typeof row.attendees === 'string' ? JSON.parse(row.attendees) : row.attendees,

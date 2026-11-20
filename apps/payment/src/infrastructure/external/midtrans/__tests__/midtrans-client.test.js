@@ -47,7 +47,7 @@ describe('createMidtransClient', () => {
     expect(seen[0].url).toBe('https://app.sandbox.midtrans.com/snap/v1/transactions');
     expect(seen[0].body.transaction_details).toEqual({ order_id: 'bk_01-1', gross_amount: 3015000 });
     expect(seen[0].body.expiry).toEqual({ start_time: '2026-11-14 10:40:00 +0700', unit: 'minutes', duration: 10 });
-    expect(seen[0].body.enabled_payments).toEqual(['bca_va', 'echannel', 'bni_va', 'bri_va', 'qris']);
+    expect(seen[0].body.enabled_payments).toEqual(['bca_va', 'echannel', 'bni_va', 'bri_va', 'other_qris']);
     expect(seen[0].auth).toBe(`Basic ${Buffer.from('sk-test:', 'utf8').toString('base64')}`);
   });
 

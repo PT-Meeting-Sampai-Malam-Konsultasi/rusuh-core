@@ -45,6 +45,19 @@ function snapItemDetails(price) {
 }
 
 /**
+ * Parses a provider gross amount as a whole IDR amount. Midtrans Get Status
+ * returns gross_amount as a decimal string (for example "133300.00"), while
+ * bookings store whole rupiah integers.
+ *
+ * @param {number|string} value - Gross amount returned by the payment provider.
+ * @returns {number|null} Safe integer IDR amount, or null when malformed/fractional.
+ */
+function parseIdrAmount(value) {
+  const amount = typeof value === 'number' || typeof value === 'string' ? Number(value) : Number.NaN;
+  return Number.isSafeInteger(amount) ? amount : null;
+}
+
+/**
  * Booking use case (LLD-02 §5–§7, §10–§11).
  * States: SELECTION (5 min, no hold) -> PAYMENT_PENDING (10 min, hold)
  *   -> PAID / EXPIRED. A late successful callback NEVER resurrects (D11).
@@ -176,7 +189,15 @@ function createBookingUseCase({
     return true;
   }
 
-  async function mintTickets(booking) {
+  /**
+   * Builds the ticket rows (codes, QR payloads, sequences) for a booking
+   * without writing any ticket. Persisting happens together with the PAID
+   * transition so the two can never diverge.
+   *
+   * @param {object} booking - Booking whose attendees receive tickets.
+   * @returns {Promise<object[]>} Ticket rows ready for the store.
+   */
+  async function buildTicketRows(booking) {
     const event = await store.getEvent(booking.eventId);
     const eventCode = event?.eventCode || 'RSH';
     // Sequences are assigned in order (reduce, not Promise.all: nextTicketSeq
@@ -194,12 +215,14 @@ function createBookingUseCase({
         entryGate: attendee.entryGate,
         holderName: attendee.fullName,
         nikMasked: attendee.nikMasked,
+        nikHmac: attendee.nikHmac,
+        nikCiphertext: attendee.nikCiphertext,
         qrPayload: qrPayload(code, qrKey),
         sequence
       });
       return rows;
     }, Promise.resolve([]));
-    return store.mintTickets(booking, ticketRows);
+    return ticketRows;
   }
 
   let api;
@@ -541,24 +564,38 @@ function createBookingUseCase({
         return { handled: true, late: true, booking: flagged };
       }
       if (booking.status !== 'PAYMENT_PENDING') return { handled: false, reason: 'not_held' };
-      if (grossAmount !== undefined && grossAmount !== booking.price.total.amount) {
+      if (grossAmount !== undefined && parseIdrAmount(grossAmount) !== booking.price.total.amount) {
         return { handled: false, reason: 'amount_mismatch' };
       }
 
-      // Guard: only PAYMENT_PENDING -> PAID (0 rows = already transitioned).
-      const paid = await store.updateBookingStatus(
+      // One transaction: status PAID + outbox row + tickets (all or nothing).
+      // Only PAYMENT_PENDING -> PAID; 0 rows = already transitioned. A failure
+      // rolls everything back, so the booking stays PAYMENT_PENDING and the
+      // next webhook / check-status retries the whole step.
+      const ticketRows = await buildTicketRows(booking);
+      const settled = await store.payBookingWithTickets(
         bookingId,
         'PAYMENT_PENDING',
-        'PAID',
         { paidAt: new Date().toISOString(), paymentMethod: paymentType || null },
-        outboxFor('booking.paid', booking)
+        outboxFor('booking.paid', booking),
+        ticketRows
       );
-      if (!paid) return { handled: true, duplicate: true, booking: await store.getBooking(bookingId) };
-
-      // Mint public ticket codes (D19) + settle the hold (held -> sold).
-      const minted = await mintTickets(paid);
-      const withTickets = await store.updateBooking(bookingId, { tickets: minted });
-      await settleHold(paid);
+      if (!settled) {
+        const current = await store.getBooking(bookingId);
+        if (current?.status === 'PAYMENT_PENDING' && new Date(current.paymentExpiresAt).getTime() <= Date.now()) {
+          await this.expireBooking(current);
+          return this.confirmPayment(bookingId, {
+            orderId,
+            transactionId,
+            transactionStatus,
+            paymentType,
+            grossAmount
+          });
+        }
+        return { handled: true, duplicate: true, booking: current };
+      }
+      const { booking: withTickets, tickets: minted } = settled;
+      await settleHold(withTickets);
       await enqueueBookingEmail(withTickets, (account, event, links) =>
         buildTicketEnvelope({ account, booking: withTickets, event, tickets: minted, links })
       );

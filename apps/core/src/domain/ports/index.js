@@ -27,6 +27,7 @@
  * @property {Function} updateBookingStatus - (bookingId, fromStatus, toStatus, patch) => Promise<booking|null>.
  * @property {Function} updateBooking - (bookingId, patch) => Promise<booking>.
  * @property {Function} mintTickets - (booking, ticketRows) => Promise<ticket[]>.
+ * @property {Function} payBookingWithTickets - (bookingId, from, patch, outbox, ticketRows) => Promise<{booking, tickets}|null>; PAID + outbox + tickets in one transaction.
  * @property {Function} listTicketsByAccount - (accountId) => Promise<ticket[]>.
  * @property {Function} getTicket - (ticketId) => Promise<ticket|null>.
  * @property {Function} nikSeatCount - (eventId, nikHmac) => Promise<number>.

@@ -16,6 +16,7 @@ const environmentSchema = Joi.object({
   // Downstream services (internal). Unset = stub mode (local dev).
   DUKCAPIL_URL: Joi.string().uri().default('http://localhost:18082'),
   PAYMENT_URL: Joi.string().uri().allow(''),
+  MIDTRANS_CLIENT_KEY: Joi.string().allow(''),
   // Buyer e-mail lookup (core -> auth internal). Unset = stub mode: booking
   // e-mails are skipped (no buyer address can be resolved).
   AUTH_URL: Joi.string().uri().allow(''),
@@ -103,6 +104,7 @@ function loadEnvironment(environment = process.env) {
     valkeyUrl: value.VALKEY_URL || null,
     dukcapilUrl: value.DUKCAPIL_URL,
     paymentUrl: value.PAYMENT_URL || null,
+    midtransClientKey: value.MIDTRANS_CLIENT_KEY || null,
     authUrl: value.AUTH_URL || null,
     serviceKey: value.SERVICE_KEY || null,
     webBaseUrl: value.WEB_BASE_URL,

@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   status TEXT NOT NULL DEFAULT 'SELECTION',
   expires_at TIMESTAMPTZ,
   payment_expires_at TIMESTAMPTZ,
+  attempt INTEGER NOT NULL DEFAULT 0,
   order_code TEXT NOT NULL,
   price JSONB NOT NULL DEFAULT '{}'::jsonb,
   attendees JSONB NOT NULL DEFAULT '[]'::jsonb,

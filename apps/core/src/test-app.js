@@ -33,12 +33,14 @@ async function createTestApp({
   payment = {},
   admission = null,
   serviceKey = 'test-service-key',
-  eventAssets
+  eventAssets,
+  midtransClientKey = null
 } = {}) {
   const config = loadEnvironment({
     NODE_ENV: 'test',
     SERVICE_KEY: serviceKey,
-    DUKCAPIL_URL: 'http://localhost:18082'
+    DUKCAPIL_URL: 'http://localhost:18082',
+    MIDTRANS_CLIENT_KEY: midtransClientKey || ''
   });
   const store = new MemoryStore();
   const stock = new MemoryStock();
